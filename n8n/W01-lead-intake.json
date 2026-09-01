@@ -1,0 +1,68 @@
+{
+  "name": "W01 - Lead Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hubspot-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "w01-webhook",
+      "name": "HubSpot Lead Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-180, 0],
+      "webhookId": "w01-hubspot-lead"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Normalise the HubSpot payload into the PRD 20 lead intake event.\n// tenant_ref is deliberately NOT sent: PRD 8.2 requires the platform to\n// derive the tenant from the service credential, never from the caller.\nconst body = $json.body ?? $json;\nconst props = body.properties ?? {};\n\nreturn {\n  json: {\n    event_id: body.eventId ?? body.objectId ?? $execution.id,\n    source: 'hubspot',\n    record_id: String(body.objectId ?? props.hs_object_id ?? ''),\n    campaign_ref: $vars.CAMPAIGN_ID,\n    contact: {\n      name: [props.firstname, props.lastname].filter(Boolean).join(' ') || null,\n      phone: props.phone ?? props.mobilephone ?? null,\n      email: props.email ?? null\n    },\n    // The client supplies the consent basis; the agency records it as\n    // evidence rather than treating it as verified (PRD 26.1).\n    consent: props.consent_basis\n      ? {\n          basis: props.consent_basis,\n          source: props.consent_source ?? 'hubspot_import',\n          evidence_ref: props.consent_evidence_ref ?? null,\n          captured_at: props.consent_captured_at ?? null\n        }\n      : null,\n    correlation_id: $execution.id\n  }\n};"
+      },
+      "id": "w01-normalize",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [40, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.PLATFORM_URL }}/api/webhooks/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "w01-ingest",
+      "name": "Platform Intake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0],
+      "notes": "Idempotent on (tenant, source, event_id) - PRD 18.1. A retry returns the original outcome instead of creating a second lead."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ accepted: true, outcome: $json.body }) }}",
+        "options": { "responseCode": 202 }
+      },
+      "id": "w01-respond",
+      "name": "Acknowledge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 0],
+      "notes": "Acknowledge fast so HubSpot does not retry on our processing time."
+    }
+  ],
+  "connections": {
+    "HubSpot Lead Event": { "main": [[{ "node": "Normalize", "type": "main", "index": 0 }]] },
+    "Normalize": { "main": [[{ "node": "Platform Intake", "type": "main", "index": 0 }]] },
+    "Platform Intake": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

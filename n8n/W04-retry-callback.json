@@ -1,0 +1,57 @@
+{
+  "name": "W04 - Retry and Callback Sweep",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] }
+      },
+      "id": "w04-schedule",
+      "name": "Every 5 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-180, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.PLATFORM_URL }}/api/internal/dial",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ campaign_id: $vars.CAMPAIGN_ID, worker_id: 'n8n-w04-' + $execution.id, limit: 25 }) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "w04-sweep",
+      "name": "Sweep due retries and callbacks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [40, 0],
+      "notes": "W04's trigger table is implemented server-side: recordCallResult applies the retry ladder on every terminal outcome, and a requested callback sets next_call_at to the exact time. This sweep just picks up whatever is now due, which is also how a lead stranded by a crashed worker gets recovered - its lock expires and it becomes claimable again."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.PLATFORM_URL }}/api/internal/sync",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ limit: 50 }) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "w04-sync",
+      "name": "Retry failed syncs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [260, 0],
+      "notes": "Clears the backlog once HubSpot or Sheets recovers. Rows past the attempt cap become dead_letter and need an operator replay (PRD 18.3)."
+    }
+  ],
+  "connections": {
+    "Every 5 minutes": { "main": [[{ "node": "Sweep due retries and callbacks", "type": "main", "index": 0 }]] },
+    "Sweep due retries and callbacks": { "main": [[{ "node": "Retry failed syncs", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}

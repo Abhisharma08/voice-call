@@ -12,10 +12,22 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/health"];
 
+/**
+ * Service surfaces authenticate with a bearer service token, not a session
+ * cookie, so the cookie gate must not touch them: redirecting an n8n worker or
+ * a provider callback to /login turns a clean 401 into a 307 the caller cannot
+ * act on. Each of these routes calls authenticateService() itself.
+ */
+const SERVICE_PATH_PREFIXES = ["/api/webhooks/", "/api/internal/"];
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return NextResponse.next();
+  }
+
+  if (SERVICE_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return NextResponse.next();
   }
 

@@ -1,0 +1,74 @@
+{
+  "name": "W02 - Calling Worker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 1 }] }
+      },
+      "id": "w02-schedule",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-180, 0],
+      "notes": "G2 targets p95 under 30s from ingestion to queued; a one-minute tick keeps dial latency in the same order."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.PLATFORM_URL }}/api/internal/dial",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ campaign_id: $vars.CAMPAIGN_ID, worker_id: 'n8n-w02-' + $execution.id, limit: 10 }) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "w02-dial",
+      "name": "Claim and Dial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [40, 0],
+      "notes": "The platform claims leads with FOR UPDATE SKIP LOCKED, re-checks consent and DNC at claim time, and enforces the calling window and concurrency caps (FR-020 to FR-022). Overlapping ticks are safe."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "id": "has-failures",
+              "leftValue": "={{ $json.body.dialled.filter(d => d.status === 'provider_failed').length }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w02-check",
+      "name": "Provider failures?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Surfacing only. The platform has already requeued transient failures\n// with exponential backoff (PRD 18.2); this is for the alerting channel in\n// PRD 18.3.\nconst failures = $input.first().json.body.dialled.filter(d => d.status === 'provider_failed');\nconsole.warn('provider failures', JSON.stringify(failures));\nreturn [{ json: { alert: 'provider_failures', count: failures.length, failures } }];"
+      },
+      "id": "w02-alert",
+      "name": "Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, -100]
+    }
+  ],
+  "connections": {
+    "Every minute": { "main": [[{ "node": "Claim and Dial", "type": "main", "index": 0 }]] },
+    "Claim and Dial": { "main": [[{ "node": "Provider failures?", "type": "main", "index": 0 }]] },
+    "Provider failures?": { "main": [[{ "node": "Alert", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
