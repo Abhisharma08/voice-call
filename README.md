@@ -88,6 +88,9 @@ Mock provider scenarios, selected by the last digit of the dialled number:
 `0` hot, `1` no answer, `2` busy, `3` not interested, `4` do-not-call,
 `5` callback requested, `9` transient provider failure.
 
+**Connecting real services** (HubSpot, Google Sheets, n8n, a voice provider):
+see [`docs/CONNECTING.md`](docs/CONNECTING.md).
+
 ---
 
 ## Quick start

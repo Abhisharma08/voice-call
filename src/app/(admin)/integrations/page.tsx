@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { withTenant } from "@/lib/auth/tenant";
 import { can } from "@/lib/auth/rbac";
 import { AddIntegrationForm } from "./add-integration-form";
+import { TestConnection } from "./test-connection";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,9 @@ export default async function IntegrationsPage() {
     );
   }
 
-  const integrations = await withTenant(user, user.activeTenantId, async (tx) => {
+  const tenantId = user.activeTenantId;
+
+  const { integrations, spreadsheetId } = await withTenant(user, tenantId, async (tx) => {
     const r = await tx.query<{
       id: string;
       type: string;
@@ -38,8 +41,9 @@ export default async function IntegrationsPage() {
       key_id: string | null;
       created_by_email: string | null;
       used_by_campaigns: string;
+      last_verified_at: Date | null;
     }>(
-      `select i.id, i.type, i.name, i.status, i.last_error, i.created_at,
+      `select i.id, i.type, i.name, i.status, i.last_error, i.created_at, i.last_verified_at,
               s.key_id, u.email as created_by_email,
               (select count(*) from campaigns c where c.hubspot_integration_id = i.id) as used_by_campaigns
          from integrations i
@@ -47,7 +51,15 @@ export default async function IntegrationsPage() {
          left join users u on u.id = i.created_by
         order by i.type, i.name`,
     );
-    return r.rows;
+
+    // The Sheets test needs a real spreadsheet to reach for; take the first one
+    // any campaign points at.
+    const sheet = await tx.query<{ google_sheet_id: string }>(
+      `select google_sheet_id from campaigns
+        where google_sheet_id is not null order by created_at limit 1`,
+    );
+
+    return { integrations: r.rows, spreadsheetId: sheet.rows[0]?.google_sheet_id ?? null };
   });
 
   return (
@@ -71,6 +83,9 @@ export default async function IntegrationsPage() {
                 <div className="spacer" />
                 <span style={{ fontSize: 11, color: "var(--muted)" }}>
                   key {i.key_id ?? "none"} · added by {i.created_by_email ?? "system"}
+                  {i.last_verified_at
+                    ? ` · verified ${i.last_verified_at.toLocaleDateString()}`
+                    : " · never verified"}
                 </span>
               </div>
 
@@ -86,6 +101,14 @@ export default async function IntegrationsPage() {
               {i.last_error ? (
                 <div style={{ fontSize: 12, color: "var(--danger)" }}>{i.last_error}</div>
               ) : null}
+
+              {can(user.role, "integration:write") ? (
+                <TestConnection
+                  tenantId={tenantId}
+                  integrationId={i.id}
+                  spreadsheetId={spreadsheetId}
+                />
+              ) : null}
             </div>
           ))}
         </div>
@@ -93,7 +116,7 @@ export default async function IntegrationsPage() {
 
       {can(user.role, "secret:write") ? (
         <div style={{ marginTop: 20 }}>
-          <AddIntegrationForm tenantId={user.activeTenantId} />
+          <AddIntegrationForm tenantId={tenantId} />
         </div>
       ) : (
         <p className="note" style={{ color: "var(--muted)", fontSize: 12, marginTop: 16 }}>
