@@ -152,7 +152,7 @@ export class MockVoiceProvider implements VoiceProvider {
     };
   }
 
-  handleWebhook(rawBody: string, headers: Record<string, string>): NormalizedWebhook {
+  handleWebhook(rawBody: string, headers: Record<string, string>, _requestUrl?: string): NormalizedWebhook {
     // PRD 18.2: "Webhook signature invalid - No - Reject + security log."
     const signature = headers["x-mock-signature"] ?? "";
     const expected = signWebhook(rawBody, this.webhookSecret);

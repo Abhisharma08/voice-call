@@ -1,5 +1,6 @@
 import { MockVoiceProvider } from "@/lib/providers/voice/mock";
 import { SarvamVoiceProvider, sarvamConfigFromEnv } from "@/lib/providers/voice/sarvam";
+import { TwilioVoiceProvider, twilioConfigFromEnv } from "@/lib/providers/voice/twilio";
 import type { VoiceProvider } from "@/lib/providers/voice/types";
 
 /**
@@ -39,6 +40,15 @@ registerProvider("mock", () => new MockVoiceProvider(process.env.VOICE_WEBHOOK_S
 const sarvam = sarvamConfigFromEnv();
 if (sarvam) {
   registerProvider("sarvam", () => new SarvamVoiceProvider(sarvam));
+}
+
+// Twilio is telephony only - the conversation is TwiML this platform serves.
+// Registered for local testing against a phone that actually rings; the
+// production voice agent is Sarvam or ElevenLabs, and ElevenLabs sits on a
+// Twilio number too, so the account carries forward.
+const twilio = twilioConfigFromEnv();
+if (twilio) {
+  registerProvider("twilio", () => new TwilioVoiceProvider(twilio));
 }
 
 export type { VoiceProvider } from "@/lib/providers/voice/types";

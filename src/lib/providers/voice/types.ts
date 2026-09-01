@@ -84,6 +84,16 @@ export interface ProviderMetadata {
   supportsRecording: boolean;
   supportsTranscript: boolean;
   /**
+   * The provider cryptographically signs its callbacks, so `handleWebhook`
+   * authenticates the request on its own.
+   *
+   * A carrier posting a status callback cannot attach a bearer service token,
+   * so for these the signature *is* the credential and the tenant is resolved
+   * from the call record. Providers that do not sign must be called with a
+   * service token as well, and default to false.
+   */
+  verifiesWebhookSignature?: boolean;
+  /**
    * Regions this provider may legally originate commercial calls to, as
    * configured. Empty means "unrestricted - confirm with counsel", which the
    * calling worker treats as a reason to require explicit compliance approval.
@@ -95,8 +105,20 @@ export interface VoiceProvider {
   metadata(): ProviderMetadata;
   createCall(request: CreateCallRequest): Promise<CreateCallResult>;
   getCallStatus(providerCallId: string): Promise<ProviderCallState>;
-  /** Verify the signature and normalise the vendor's payload shape. */
-  handleWebhook(rawBody: string, headers: Record<string, string>): NormalizedWebhook;
+  /**
+   * Verify the signature and normalise the vendor's payload shape.
+   *
+   * `requestUrl` is the full URL the callback was delivered to, including the
+   * query string. Twilio signs the URL together with the parameters, so a
+   * signature cannot be checked without it - and reconstructing it from Host
+   * and path is exactly the kind of guess that produces a check which passes
+   * on malformed input.
+   */
+  handleWebhook(
+    rawBody: string,
+    headers: Record<string, string>,
+    requestUrl: string,
+  ): NormalizedWebhook;
   retrieveTranscript(providerCallId: string): Promise<ProviderTranscript | null>;
   hangup(providerCallId: string): Promise<void>;
 }
