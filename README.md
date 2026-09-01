@@ -3,10 +3,11 @@
 Control plane for the AI lead-qualification calling platform described in
 `docs/Multi_Tenant_AI_Lead_Calling_Platform_PRD_v1.2.pdf`.
 
-**Status: Phase 1 (single-client vertical slice) complete.** A lead flows
-from a HubSpot-shaped event through intake, the calling queue, an AI call, LLM
-qualification and the human-review gate, out to Google Sheets, HubSpot and
-hot-lead routing. Multi-tenant generalisation is Phase 2.
+**Status: Phase 2 (configuration-driven multi-tenancy) complete.** A lead
+flows from a HubSpot-shaped event through intake, the calling queue, an AI
+call, LLM qualification and the human-review gate, out to Google Sheets,
+HubSpot and hot-lead routing - and every client-specific difference is now
+editable configuration rather than code. Production hardening is Phase 3.
 
 ---
 
@@ -43,6 +44,24 @@ HubSpot updates, and an end-to-end test lead.
 | Integrations (PRD 13) | `src/lib/integrations/` - HubSpot, Sheets, transactional outbox with backoff |
 | Workflows (PRD 9) | `n8n/W01`-`W04` JSON, importable |
 | Service identities | Per-tenant bearer tokens, scoped per workflow |
+
+## What Phase 2 adds
+
+PRD 22's Phase 2 is tenant-scoped config, per-tenant credentials, multiple
+campaigns, per-campaign prompts/questions/scoring, tenant dashboards and audit
+logs.
+
+| Area | Implementation |
+| --- | --- |
+| Client onboarding (PRD 14.3) | `/clients` - create a tenant, add agency-managed credentials, track health |
+| Campaign configuration | `/campaigns/[id]` - script, questions, rubric, thresholds, windows, retries, destinations, model |
+| Config versioning (PRD 9) | Every save bumps `config_version` and snapshots into `campaign_versions` |
+| Compliance gate (PRD 17.3) | Consent declaration and a named attestation, both required before a campaign can dial |
+| Credentials (PRD 17.1) | `/integrations` - sealed on entry, validated for shape, never read back |
+| Staff & elevations (PRD 8.2) | `/settings` - assignments, time-boxed logged elevations |
+| KPIs (PRD 21) | `/analytics` - operational, AI-performance and commercial metrics kept apart |
+| Audit UI (PRD 17.1) | `/audit` - filterable, append-only |
+| Lead & call detail (PRD 14.4) | `/leads/[id]`, `/calls` - consent basis and config version per call |
 
 ### Try the whole flow
 
@@ -226,6 +245,7 @@ db/migrations/          Authoritative SQL. Forward-only, checksummed.
   0002_rls_policies.sql        Policies and least-privilege grants
   0003_auth_lookups.sql        SECURITY DEFINER auth entry points
   0004_phase1_calling.sql      Service tokens, webhook idempotency, queue locks
+  0005_phase2_configuration.sql Config provenance, consent declaration, versions
 scripts/                migrate / seed / reset
 src/db/                 Pools, scoped transactions, typed schema mirror
 src/lib/crypto/         KMS envelope encryption, PII, password hashing
@@ -235,6 +255,8 @@ src/lib/calling/        Queue, calling windows, retry ladder, worker, results
 src/lib/qualification/  Schema, analysis, scoring, review gate, resolution
 src/lib/providers/      Voice provider adapter and the mock implementation
 src/lib/integrations/   HubSpot, Google Sheets, transactional outbox
+src/lib/campaigns/      Campaign configuration schema, versioning, activation checks
+src/lib/actions.ts      Permission + tenant scope + audit wrapper for every write
 n8n/                    W01-W04 workflow definitions
 src/lib/audit.ts        Append-only audit trail
 src/app/                Next.js App Router; (admin) is the shell
@@ -258,8 +280,8 @@ run. Write a new migration instead.
   does not change. Provider choice is a compliance decision (PRD 17.3).
 - **Notification transport** (PRD 16). The routing event, the hot-lead payload
   and the masked phone number are produced; the email/Slack delivery is not.
-- **Multi-tenant generalisation** (Phase 2): client onboarding wizard,
-  per-tenant dashboards, campaign editing UI, analytics, audit log UI.
+- **Production hardening** (Phase 3): load testing, alerting on the PRD 18.3
+  signals, dead-letter replay UI, backup/restore drill, security testing.
 - **Live transfer, multi-channel follow-up, A/B testing** (Phase 4).
 
 Navigation entries for the unbuilt surfaces render a placeholder naming the

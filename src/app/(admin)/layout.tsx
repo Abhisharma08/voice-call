@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
 import { listAccessibleTenants } from "@/lib/auth/tenant";
-import { hasGlobalScope } from "@/lib/auth/rbac";
+import { can, hasGlobalScope, type Permission } from "@/lib/auth/rbac";
 import { TenantSwitcher } from "./tenant-switcher";
 import { SignOutButton } from "./sign-out-button";
 
@@ -11,18 +11,18 @@ import { SignOutButton } from "./sign-out-button";
  * 14.1 predates that section.
  */
 const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/clients", label: "Clients" },
-  { href: "/campaigns", label: "Campaigns" },
-  { href: "/leads", label: "Leads" },
-  { href: "/calls", label: "Calls" },
-  { href: "/review", label: "Review Queue" },
-  { href: "/callbacks", label: "Callbacks" },
-  { href: "/analytics", label: "Analytics" },
-  { href: "/integrations", label: "Integrations" },
-  { href: "/settings", label: "Settings" },
-  { href: "/audit", label: "Audit Log" },
-] as const;
+  { href: "/dashboard", label: "Dashboard", needs: null },
+  { href: "/clients", label: "Clients", needs: "tenant:read" },
+  { href: "/campaigns", label: "Campaigns", needs: "campaign:read" },
+  { href: "/leads", label: "Leads", needs: "lead:read" },
+  { href: "/calls", label: "Calls", needs: "call:read" },
+  { href: "/review", label: "Review Queue", needs: "review:read" },
+  { href: "/callbacks", label: "Callbacks", needs: "call:read" },
+  { href: "/analytics", label: "Analytics", needs: "analytics:read" },
+  { href: "/integrations", label: "Integrations", needs: "integration:read" },
+  { href: "/settings", label: "Settings", needs: "user:read" },
+  { href: "/audit", label: "Audit Log", needs: "audit:read" },
+] as const satisfies ReadonlyArray<{ href: string; label: string; needs: Permission | null }>;
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -42,8 +42,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           canSeeAll={hasGlobalScope(user.role)}
         />
 
+        {/* Only show what this role can actually open. A nav entry that always
+            refuses reads as a broken link, not as a permission boundary. */}
         <nav className="nav">
-          {NAV.map((item) => (
+          {NAV.filter((item) => item.needs === null || can(user.role, item.needs)).map((item) => (
             <Link key={item.href} href={item.href}>
               {item.label}
             </Link>
