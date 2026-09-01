@@ -192,13 +192,67 @@ halfway without double-calling a lead.
 
 ---
 
-## 6. Voice provider — this one needs code
+## 6. Voice provider
 
-Only the `mock` provider is registered. It places no calls; it returns scripted
-transcripts so the rest of the pipeline can be exercised.
+Two are registered: `mock` (places no calls, returns scripted transcripts) and
+`sarvam`.
 
-A real provider means implementing `VoiceProvider` in
-`src/lib/providers/voice/types.ts` — six methods:
+### Sarvam AI
+
+Set these in `.env.local` and restart. The adapter registers only when all six
+are present, so a half-configured provider fails at claim time with a clear
+message rather than dialling.
+
+```
+SARVAM_API_KEY=
+SARVAM_ORG_ID=
+SARVAM_WORKSPACE_ID=
+SARVAM_APP_ID=
+SARVAM_APP_VERSION=1
+SARVAM_CONNECTION_ID=
+SARVAM_AGENT_PHONE_NUMBER=+91...
+VOICE_WEBHOOK_SECRET=<a long random string>
+```
+
+From the Sarvam console: the org and workspace your agent lives in, the agent
+("app") that runs the conversation, and the telephony connection plus the
+number calls originate from. Then set **Voice provider → `sarvam`** on the
+campaign.
+
+One Sarvam agent serves every campaign. The script, business context and
+qualification questions travel as `agent_variables` and
+`app_overrides.initial_bot_message` on each call, so campaign differences stay
+configuration here too.
+
+**Callback URL** — point the agent's webhook at
+`https://<your APP_URL>/api/webhooks/voice/sarvam`. The adapter builds this
+from `APP_URL`, so a stale value means results never arrive.
+
+#### Two things worth knowing
+
+**Sarvam does not sign its webhooks.** There is no signature header to verify.
+The adapter works around it: `createCall` puts a keyed token in
+`webhook_config.metadata`, which Sarvam echoes back untouched, and the callback
+handler recomputes it from the call id. That authenticates the *call* rather
+than the payload, so treat it as defence in depth — the endpoint still requires
+a bearer service token, and `recordCallResult` is idempotent on
+(provider, provider_call_id). Put the callback behind a source-IP allowlist in
+production if Sarvam publishes one.
+
+**NDNC failures are suppressions, not retries.** Sarvam surfaces the carrier
+message verbatim, e.g. `"exotel: Phone number is registered under TRAI NDNC"`.
+The adapter recognises NDNC/DND registrations and dead numbers and returns a
+`suppress` signal; the platform then adds the number to the tenant DNC list and
+stops all future attempts. Without that, the retry ladder would re-dial a
+number the registry says must not be called.
+
+`hangup()` throws: Sarvam documents no cancel endpoint, and a silent no-op
+would let a caller believe a call in progress had been stopped. Suppression
+still applies to every future attempt.
+
+### Writing another adapter
+
+Implement `VoiceProvider` in `src/lib/providers/voice/types.ts` — six methods:
 
 ```ts
 metadata()            // name, capabilities, permitted regions
@@ -209,13 +263,17 @@ retrieveTranscript(id)
 hangup(id)
 ```
 
-Then register it:
+Then register it in `src/lib/providers/voice/index.ts`:
 
 ```ts
 registerProvider("twilio", () => new TwilioVoiceProvider(config));
 ```
 
 and select it per campaign in the editor. The calling worker does not change.
+
+Provider credentials currently come from environment variables, so one Sarvam
+account serves all tenants. Per-tenant provider credentials are a Phase 3 item
+— the `integrations` table already has a `voice_provider` type for it.
 
 ### Before you pick one, read PRD 17.3
 
@@ -290,5 +348,8 @@ PostgreSQL, it is outside the platform's access-control layer.
 | Campaign will not activate | Open items on the compliance checklist |
 | Leads suppressed as `no_consent` | No consent basis on the campaign, and none in the event |
 | Only 5 leads dialled | `concurrency_limit` on the campaign (FR-022). Working as intended |
+| `Unknown voice provider "sarvam"` | Not all six `SARVAM_*` vars are set, or the server was not restarted |
+| Sarvam call results never arrive | `APP_URL` stale, or the agent's webhook is not pointed at `/api/webhooks/voice/sarvam` |
+| Lead suppressed as `trai_ndnc_registered` | The number is on India's NDNC registry. Correct and permanent |
 
 Everything above is also visible in `/audit`, filtered by category.

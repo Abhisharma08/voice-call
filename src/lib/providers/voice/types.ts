@@ -65,6 +65,18 @@ export interface NormalizedWebhook {
   durationSec?: number;
   failureReason?: string;
   transcript?: ProviderTranscript;
+  /**
+   * The carrier reported a condition that must stop all future attempts, not
+   * just this one - a number on India's NDNC/DND registry, or one that does
+   * not exist.
+   *
+   * This is distinct from a failed call. The retry ladder would otherwise
+   * treat "registered under TRAI NDNC" as a transient failure and dial again,
+   * which is both futile and a regulatory problem (PRD 17.4, 17.3). An adapter
+   * sets this when it recognises such a reason; the platform turns it into a
+   * permanent suppression.
+   */
+  suppress?: { reason: string; permanent: true };
 }
 
 export interface ProviderMetadata {
