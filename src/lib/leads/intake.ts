@@ -56,9 +56,12 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
           consent_basis: string | null;
           consent_source: string | null;
           consent_evidence_ref: string | null;
+          consent_mode: "require_record" | "inherit_from_source";
+          consent_origin: string | null;
         }>(
           `select id, timezone, calling_config,
-                  consent_basis, consent_source, consent_evidence_ref
+                  consent_basis, consent_source, consent_evidence_ref,
+                  consent_mode, consent_origin
              from campaigns where id = $1`,
           [event.campaignId],
         )
@@ -89,26 +92,24 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
     ? await updateLead(tx, existing.id, event, { phone, phoneBidx, email, emailBidx })
     : await insertLead(tx, event, { phone, phoneBidx, email, emailBidx, defaultCountry });
 
-  // Consent supplied with the event wins; otherwise fall back to the basis the
-  // Campaign Manager recorded for this client's list (PRD 14.3 step 10).
+  // Consent is recorded, not demanded.
   //
-  // The fallback still writes a per-lead consents row rather than letting the
-  // campaign flag stand in for one, so every call cites a specific, dated
-  // record naming where the basis came from - which is the evidentiary trail
-  // PRD 26.1 asks for, not a blanket claim.
-  const consent =
-    event.consent ??
-    (campaign?.consent_basis
-      ? {
-          basis: campaign.consent_basis as NonNullable<IntakeEvent["consent"]>["basis"],
-          source: campaign.consent_source ?? "campaign_declaration",
-          evidenceRef: campaign.consent_evidence_ref ?? null,
-          capturedAt: null,
-        }
-      : null);
-
+  // In the real funnel it is collected at the landing page or Meta lead form
+  // and the lead reaches HubSpot before this platform sees it, so there is
+  // nothing here to ask a human for. Three sources, most specific first:
+  //
+  //   1. consent that arrived with the event (HubSpot properties, form fields)
+  //   2. the basis the Campaign Manager recorded for this list
+  //   3. inference from where the lead came from, on inherit_from_source
+  //      campaigns
+  //
+  // The third is the common path now, and the row it writes says
+  // `inherited_upstream` - an honest label. The agency did not run the opt-in
+  // funnel and has not independently verified it, and a record that says so is
+  // worth more than one that overstates.
+  const { consent, capturedBy } = resolveConsent(event, campaign);
   if (consent) {
-    await recordConsent(tx, tenantId, leadId, consent, event.consent ? "client_supplied" : "campaign_declaration");
+    await recordConsent(tx, tenantId, leadId, consent, capturedBy);
   }
 
   // FR-012: no callable number means quarantine, with the reason recorded and
@@ -295,12 +296,60 @@ async function updateLead(
   return leadId;
 }
 
+type ConsentProvenance = "client_supplied" | "campaign_declaration" | "inherited_upstream";
+
+interface CampaignConsent {
+  consent_basis: string | null;
+  consent_source: string | null;
+  consent_evidence_ref: string | null;
+  consent_mode: "require_record" | "inherit_from_source";
+  consent_origin: string | null;
+}
+
+function resolveConsent(
+  event: IntakeEvent,
+  campaign: CampaignConsent | null,
+): { consent: NonNullable<IntakeEvent["consent"]> | null; capturedBy: ConsentProvenance } {
+  if (event.consent) {
+    return { consent: event.consent, capturedBy: "client_supplied" };
+  }
+
+  if (campaign?.consent_basis) {
+    return {
+      consent: {
+        basis: campaign.consent_basis as NonNullable<IntakeEvent["consent"]>["basis"],
+        source: campaign.consent_source ?? campaign.consent_origin ?? "campaign_declaration",
+        evidenceRef: campaign.consent_evidence_ref ?? null,
+        capturedAt: null,
+      },
+      capturedBy: "campaign_declaration",
+    };
+  }
+
+  if (campaign?.consent_mode === "inherit_from_source") {
+    // Nobody typed this in. It names the funnel the lead came through, which
+    // is the most specific true thing available: "meta_lead_form",
+    // "landing_page_form", or whatever the source field carried.
+    return {
+      consent: {
+        basis: "opt_in_form",
+        source: campaign.consent_origin ?? event.source ?? "upstream_form",
+        evidenceRef: event.recordId ? `${event.source}:${event.recordId}` : null,
+        capturedAt: null,
+      },
+      capturedBy: "inherited_upstream",
+    };
+  }
+
+  return { consent: null, capturedBy: "campaign_declaration" };
+}
+
 async function recordConsent(
   tx: PoolClient,
   tenantId: string,
   leadId: string,
   consent: NonNullable<IntakeEvent["consent"]>,
-  capturedBy: "client_supplied" | "campaign_declaration",
+  capturedBy: ConsentProvenance,
 ): Promise<void> {
   // PRD 26.1: the agency needs its own evidentiary trail rather than an
   // unverified assumption inherited from the client at intake.

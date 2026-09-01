@@ -262,12 +262,13 @@ describe("intake (FR-010 to FR-014)", () => {
     // Phase 2 added a campaign-level consent declaration, and intake mints a
     // per-lead consents row from it. So "no consent" now means neither the
     // event nor the campaign carries a basis - which is what this clears.
-    // The approval has to go with it: migration 0005 forbids an approved
-    // campaign without a recorded consent basis, which is the whole point.
+    // "No consent anywhere" now means: nothing on the event, nothing declared
+    // on the campaign, and the campaign set to require an explicit record
+    // rather than inherit from the funnel (migration 0006).
     await asGlobal(() =>
       owner.query(
         `update campaigns set consent_basis = null, consent_source = null,
-                compliance_approved_at = null
+                consent_mode = 'require_record'
           where id = $1`,
         [CAMPAIGN],
       ),
@@ -291,7 +292,7 @@ describe("intake (FR-010 to FR-014)", () => {
       await asGlobal(() =>
         owner.query(
           `update campaigns set consent_basis = 'opt_in_form', consent_source = 'slice_test_list',
-                  compliance_approved_at = now()
+                  consent_mode = 'require_record', compliance_approved_at = now()
             where id = $1`,
           [CAMPAIGN],
         ),

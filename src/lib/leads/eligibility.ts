@@ -94,10 +94,11 @@ export async function checkEligibility(
   const campaign = await tx.query<{
     active: boolean;
     service_call_campaign: boolean;
+    consent_mode: "require_record" | "inherit_from_source";
     compliance_approved_at: Date | null;
     calling_config: { max_attempts?: number };
   }>(
-    `select active, service_call_campaign, compliance_approved_at, calling_config
+    `select active, service_call_campaign, consent_mode, compliance_approved_at, calling_config
        from campaigns where id = $1`,
     [campaignId],
   );
@@ -127,10 +128,44 @@ export async function checkEligibility(
     };
   }
 
-  // 3. Consent. PRD 26.1: "A lead may not be queued for calling unless an
-  //    active consents record exists for it, or the campaign is explicitly
-  //    flagged as service-call/existing-relationship."
+  // 3. Consent.
+  //
+  // PRD 26.1's rule - "A lead may not be queued for calling unless an active
+  // consents record exists" - assumed the platform was where consent first
+  // became known. In the real operating model it is not: consent is collected
+  // at the landing page or Meta lead form, and the lead reaches HubSpot before
+  // this platform sees it.
+  //
+  // So `inherit_from_source` campaigns record consent at intake rather than
+  // gating on it, and only a *withdrawal* stops the call. A campaign whose
+  // list provenance is not established upstream can still be set to
+  // `require_record`, which restores the strict rule.
+  const enforcesConsent =
+    !c.service_call_campaign && c.consent_mode === "require_record";
+
+  // A withdrawal is honoured under either mode. Someone who opted out after
+  // the form is the case the whole record exists for.
   if (!c.service_call_campaign) {
+    const withdrawn = await tx.query(
+      `select 1 from consents
+        where lead_id = $1 and status in ('withdrawn', 'expired')
+          and not exists (
+            select 1 from consents active
+             where active.lead_id = $1 and active.status = 'active'
+               and active.captured_at > consents.captured_at)
+        limit 1`,
+      [leadId],
+    );
+    if (withdrawn.rowCount) {
+      return {
+        eligible: false,
+        reason: "consent_withdrawn",
+        detail: "Consent for this lead was withdrawn",
+      };
+    }
+  }
+
+  if (enforcesConsent) {
     const consent = await tx.query<{ status: string }>(
       `select status from consents
         where lead_id = $1 and status = 'active'
