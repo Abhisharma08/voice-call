@@ -290,23 +290,52 @@ picking a provider, because the answer changes which providers are viable.
 
 ---
 
-## 7. Before any real call: the compliance gate
+## 7. Consent
 
-The platform will not dial until three things are recorded, in order. This is
-deliberate and enforced by a database constraint, not just the UI.
+Consent is collected upstream — the landing page or Meta lead form — and the
+lead reaches HubSpot before this platform sees it. So the platform **records**
+consent rather than demanding it.
+
+New campaigns default to `inherit_from_source`. On intake every lead still gets
+a dated `consents` row, derived in this order:
+
+1. Consent that arrived with the event. W01 maps HubSpot's fields
+   (`consent_basis`, `hs_legal_basis`, `hs_latest_source`) through when set.
+2. A basis explicitly declared on the campaign, if a Campaign Manager recorded
+   one.
+3. The campaign's consent origin, or the lead's source — written as
+   `captured_by = inherited_upstream`.
+
+That last label is deliberate: it says the agency did not run the opt-in funnel
+and has not independently verified it, which is a truer record than a blanket
+assertion and is what makes a call individually justifiable later.
+
+**Nothing blocks.** Naming the origin on the campaign (*Consent basis → Record
+origin*) is optional and only makes the audit trail easier to read.
+
+Two things still stop a call:
+
+- **A withdrawal.** If a lead's consent is marked withdrawn, they are not
+  called — under either mode. Someone unsubscribing after the form is the case
+  the record exists for.
+- **DNC.** Manual, voice-detected, or carrier-reported (see the NDNC note in
+  step 6).
+
+Set a campaign to `require_record` only for a list whose provenance is not
+established upstream — a purchased list, or a client import with no funnel
+behind it. Then a lead without an explicit consent record is suppressed.
+
+## 8. Before any real call: the compliance gate
 
 **Campaigns → your campaign:**
 
-1. **Consent basis for the client's lead list** (PRD 14.3 step 10) — what the
-   client asserted, where it came from, and a reference to the evidence.
-   Attributed to whoever records it.
-2. **Compliance approval** (PRD 17.3) — Agency Admin only, and it requires
+1. **Compliance approval** (PRD 17.3) — Agency Admin only, and it requires
    writing what was actually reviewed: sender/telemarketer registration,
    consent evidence, provider arrangement, DNC handling, recording notices,
    retention. The attestation goes in the audit log.
-3. **Activate** — refuses while any checklist item is open.
+2. **Activate** — refuses while any checklist item is open.
 
-None of this substitutes for the review itself. The software's job is to refuse
+This does not substitute for the review itself. The software's job is to refuse
 to dial without it and to keep a record of who said it happened.
 
 ---
@@ -346,7 +375,8 @@ PostgreSQL, it is outside the platform's access-control layer.
 | Integration flips to `error` and stops | PRD 18.2: auth failure disables rather than retrying. Fix the credential, press *Test connection* to re-enable |
 | Call results never arrive | `APP_URL` is stale or the tunnel died |
 | Campaign will not activate | Open items on the compliance checklist |
-| Leads suppressed as `no_consent` | No consent basis on the campaign, and none in the event |
+| Leads suppressed as `no_consent` | The campaign is set to `require_record` and no basis is declared. Switch it to `inherit_from_source` if consent comes from the funnel |
+| Leads suppressed as `consent_withdrawn` | A `consents` row for that lead is marked withdrawn. Correct under either mode |
 | Only 5 leads dialled | `concurrency_limit` on the campaign (FR-022). Working as intended |
 | `Unknown voice provider "sarvam"` | Not all six `SARVAM_*` vars are set, or the server was not restarted |
 | Sarvam call results never arrive | `APP_URL` stale, or the agent's webhook is not pointed at `/api/webhooks/voice/sarvam` |

@@ -31,11 +31,14 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       consent_source: string | null;
       consent_evidence_ref: string | null;
       consent_declared_at: Date | null;
+      consent_mode: "require_record" | "inherit_from_source";
+      consent_origin: string | null;
       declared_by_email: string | null;
       approved_by_email: string | null;
     }>(
       `select c.compliance_approved_at, c.consent_basis, c.consent_source,
               c.consent_evidence_ref, c.consent_declared_at,
+              c.consent_mode, c.consent_origin,
               d.email as declared_by_email, a.email as approved_by_email
          from campaigns c
          left join users d on d.id = c.consent_declared_by
@@ -80,6 +83,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const blockers = activationBlockers({
     complianceApprovedAt: data.meta.compliance_approved_at,
     consentBasis: data.meta.consent_basis,
+    consentMode: data.meta.consent_mode,
     script: data.config.script,
     questions: data.config.questions.length,
     googleSheetId: data.config.googleSheetId,
@@ -105,6 +109,8 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           evidenceRef: data.meta.consent_evidence_ref,
           declaredAt: data.meta.consent_declared_at?.toISOString() ?? null,
           declaredBy: data.meta.declared_by_email,
+          mode: data.meta.consent_mode,
+          origin: data.meta.consent_origin,
         }}
         approval={{
           approvedAt: data.meta.compliance_approved_at?.toISOString() ?? null,

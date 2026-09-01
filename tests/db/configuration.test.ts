@@ -89,7 +89,8 @@ beforeEach(async () => {
     await owner.query(`delete from leads where tenant_id = $1`, [TENANT]);
     await owner.query(
       `update campaigns set compliance_approved_at = null, compliance_approved_by = null,
-              consent_basis = null, consent_source = null, active = false
+              consent_basis = null, consent_source = null, active = false,
+              consent_mode = 'require_record', consent_origin = null
         where tenant_id = $1`,
       [TENANT],
     );
@@ -260,15 +261,27 @@ describe("saving configuration", () => {
 });
 
 describe("compliance gate (PRD 17.3, 14.3 step 10)", () => {
-  it("refuses a compliance approval with no recorded consent basis", async () => {
-    await expect(
-      asGlobal(() =>
-        owner.query(`update campaigns set compliance_approved_at = now() where id = $1`, [CAMPAIGN_A]),
-      ),
-    ).rejects.toThrow(/campaigns_compliance_needs_consent_ck/);
+  it("approves without a declared consent basis, now that consent is inherited", async () => {
+    // Migration 0006 dropped the precondition. Consent is collected upstream
+    // at the form, so a declared basis here was standing in for something the
+    // funnel already answers. The attestation below is the check that matters.
+    await asGlobal(() =>
+      owner.query(`update campaigns set compliance_approved_at = now() where id = $1`, [CAMPAIGN_A]),
+    );
+
+    const r = await withScope(scope, async (tx) =>
+      (
+        await tx.query<{ compliance_approved_at: Date | null; consent_basis: string | null }>(
+          `select compliance_approved_at, consent_basis from campaigns where id = $1`,
+          [CAMPAIGN_A],
+        )
+      ).rows[0],
+    );
+    expect(r?.compliance_approved_at).not.toBeNull();
+    expect(r?.consent_basis).toBeNull();
   });
 
-  it("accepts the approval once a consent basis is recorded", async () => {
+  it("still accepts an explicitly recorded consent basis", async () => {
     await asGlobal(async () => {
       await owner.query(
         `update campaigns set consent_basis = 'opt_in_form', consent_source = 'landing_page_form',
@@ -292,17 +305,32 @@ describe("compliance gate (PRD 17.3, 14.3 step 10)", () => {
     expect(r?.compliance_approved_at).not.toBeNull();
   });
 
-  it("lists every open blocker before activation", () => {
+  it("does not block an inherit_from_source campaign on a consent basis", () => {
     const blockers = activationBlockers({
       complianceApprovedAt: null,
       consentBasis: null,
+      consentMode: "inherit_from_source",
+      script: "",
+      questions: 0,
+      googleSheetId: null,
+      hubspotIntegrationId: null,
+    });
+    expect(blockers).toHaveLength(5);
+    expect(blockers.join(" ")).not.toMatch(/consent/i);
+  });
+
+  it("still blocks a require_record campaign on a missing consent basis", () => {
+    const blockers = activationBlockers({
+      complianceApprovedAt: null,
+      consentBasis: null,
+      consentMode: "require_record",
       script: "",
       questions: 0,
       googleSheetId: null,
       hubspotIntegrationId: null,
     });
     expect(blockers).toHaveLength(6);
-    expect(blockers[0]).toMatch(/consent basis/i);
+    expect(blockers[0]).toMatch(/consent record/i);
   });
 
   it("reports no blockers for a fully configured campaign", () => {
@@ -310,6 +338,7 @@ describe("compliance gate (PRD 17.3, 14.3 step 10)", () => {
       activationBlockers({
         complianceApprovedAt: new Date(),
         consentBasis: "opt_in_form",
+        consentMode: "require_record",
         script: "Hello",
         questions: 2,
         googleSheetId: "sheet-1",
@@ -330,7 +359,11 @@ describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", 
     correlationId: null,
   });
 
-  it("writes no consent record when neither the event nor the campaign carries a basis", async () => {
+  it("writes no consent record on a require_record campaign with no basis", async () => {
+    await asGlobal(() =>
+      owner.query(`update campaigns set consent_mode = 'require_record' where id = $1`, [CAMPAIGN_A]),
+    );
+
     const outcome = await withScope(scope, (tx) => ingestLead(tx, event(CAMPAIGN_A)));
 
     // Which gate reports first depends on the campaign's state - an inactive
@@ -343,6 +376,71 @@ describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", 
       (await tx.query(`select 1 from consents where lead_id = $1`, [outcome.leadId])).rowCount,
     );
     expect(consents).toBe(0);
+  });
+
+  it("inherits consent from the lead source when the campaign says to", async () => {
+    await asGlobal(() =>
+      owner.query(
+        `update campaigns set consent_mode = 'inherit_from_source',
+                consent_origin = 'meta_lead_form',
+                compliance_approved_at = now(), active = true,
+                calling_config = jsonb_set(
+                  jsonb_set(calling_config, '{window_start}', '"00:00"'),
+                  '{window_end}', '"23:59"')
+          where id = $1`,
+        [CAMPAIGN_A],
+      ),
+    );
+
+    // No consent on the event, none declared on the campaign - and it still
+    // queues, because the funnel upstream is where consent was collected.
+    const outcome = await withScope(scope, (tx) => ingestLead(tx, event(CAMPAIGN_A)));
+    expect(outcome.status).toBe("queued");
+
+    const consent = await withScope(scope, async (tx) =>
+      (
+        await tx.query<{ basis: string; source: string; captured_by: string; evidence_ref: string }>(
+          `select basis, source, captured_by, evidence_ref from consents where lead_id = $1`,
+          [outcome.leadId],
+        )
+      ).rows[0],
+    );
+
+    // The record is honest about where it came from rather than overstating.
+    expect(consent?.captured_by).toBe("inherited_upstream");
+    expect(consent?.source).toBe("meta_lead_form");
+    expect(consent?.evidence_ref).toContain("hubspot:");
+  });
+
+  it("still stops a lead whose consent was withdrawn, even under inherit", async () => {
+    await asGlobal(() =>
+      owner.query(
+        `update campaigns set consent_mode = 'inherit_from_source',
+                compliance_approved_at = now(), active = true,
+                calling_config = jsonb_set(
+                  jsonb_set(calling_config, '{window_start}', '"00:00"'),
+                  '{window_end}', '"23:59"')
+          where id = $1`,
+        [CAMPAIGN_A],
+      ),
+    );
+
+    const outcome = await withScope(scope, (tx) => ingestLead(tx, event(CAMPAIGN_A)));
+    expect(outcome.status).toBe("queued");
+
+    // Someone unsubscribing after the form is exactly what the record is for,
+    // so a withdrawal is honoured under either mode.
+    await asGlobal(() =>
+      owner.query(`update consents set status = 'withdrawn', revoked_at = now() where lead_id = $1`, [
+        outcome.leadId,
+      ]),
+    );
+
+    const claim = await withScope(scope, (tx) =>
+      claimLeads(tx, { tenantId: TENANT, campaignId: CAMPAIGN_A, workerId: "w" }),
+    );
+    expect(claim.claimed).toHaveLength(0);
+    expect(claim.skipped[0]?.detail).toBe("consent_withdrawn");
   });
 
   it("stops a queued lead once its consent is withdrawn (PRD 17.4)", async () => {
@@ -489,8 +587,11 @@ describe("configuration actually changes behaviour", () => {
       }),
     );
 
+    // No fixed `now` here: the lead's next_call_at is real wall-clock, so a
+    // pinned past instant would make it look not-yet-due rather than testing
+    // the window. The 00:00-23:59 window is open whenever this runs.
     const open = await withScope(scope, (tx) =>
-      claimLeads(tx, { tenantId: TENANT, campaignId: CAMPAIGN_A, workerId: "w", now: new Date("2026-09-01T14:30:00Z") }),
+      claimLeads(tx, { tenantId: TENANT, campaignId: CAMPAIGN_A, workerId: "w" }),
     );
     expect(open.claimed).toHaveLength(1);
 
@@ -506,6 +607,8 @@ describe("configuration actually changes behaviour", () => {
       window_end: "09:31",
     });
 
+    // A pinned instant is fine here: the window check runs before the
+    // due-date query and returns early, so next_call_at never matters.
     const closed = await withScope(scope, (tx) =>
       claimLeads(tx, { tenantId: TENANT, campaignId: CAMPAIGN_A, workerId: "w", now: new Date("2026-09-01T14:30:00Z") }),
     );

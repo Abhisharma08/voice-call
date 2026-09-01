@@ -300,6 +300,7 @@ export async function saveCampaignConfig(
 export function activationBlockers(campaign: {
   complianceApprovedAt: Date | string | null;
   consentBasis: string | null;
+  consentMode?: "require_record" | "inherit_from_source";
   script: string | null;
   questions: number;
   googleSheetId: string | null;
@@ -307,8 +308,13 @@ export function activationBlockers(campaign: {
 }): string[] {
   const blockers: string[] = [];
 
-  if (!campaign.consentBasis) {
-    blockers.push("No consent basis recorded for this client's lead list (PRD 14.3 step 10, 26.1)");
+  // Only a require_record campaign needs a declared basis before it can run.
+  // An inherit_from_source campaign takes consent from the funnel the lead
+  // came through, so there is nothing for a human to type here.
+  if (campaign.consentMode === "require_record" && !campaign.consentBasis) {
+    blockers.push(
+      "This campaign requires an explicit consent record per lead, and no basis is declared for the list",
+    );
   }
   if (!campaign.complianceApprovedAt) {
     blockers.push("Compliance review has not signed off on outbound calling (PRD 17.3)");

@@ -48,6 +48,8 @@ export function CompliancePanel({
     evidenceRef: string | null;
     declaredAt: string | null;
     declaredBy: string | null;
+    mode: "require_record" | "inherit_from_source";
+    origin: string | null;
   };
   approval: { approvedAt: string | null; approvedBy: string | null };
   canConfigure: boolean;
@@ -56,7 +58,9 @@ export function CompliancePanel({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [showConsent, setShowConsent] = useState(!consent.basis);
+  const [showConsent, setShowConsent] = useState(
+    consent.mode === "require_record" && !consent.basis,
+  );
   const [attestation, setAttestation] = useState("");
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
@@ -118,15 +122,21 @@ export function CompliancePanel({
         <div className="row" style={{ gap: 8 }}>
           <strong style={{ fontSize: 13 }}>Consent basis for this client&rsquo;s lead list</strong>
           <div className="spacer" />
-          {consent.basis && canConfigure ? (
+          {canConfigure ? (
             <button
               className="ghost"
               onClick={() => setShowConsent((s) => !s)}
               style={{ padding: "3px 8px", fontSize: 12 }}
             >
-              {showConsent ? "Cancel" : "Change"}
+              {showConsent ? "Cancel" : consent.basis ? "Change" : "Record origin"}
             </button>
           ) : null}
+        </div>
+
+        <div className="row" style={{ gap: 6, marginTop: 6 }}>
+          <span className={`pill ${consent.mode === "inherit_from_source" ? "ok" : "warn"}`}>
+            {consent.mode === "inherit_from_source" ? "inherited from source" : "explicit record required"}
+          </span>
         </div>
 
         {consent.basis ? (
@@ -140,10 +150,16 @@ export function CompliancePanel({
                 : ""}
             </span>
           </div>
+        ) : consent.mode === "inherit_from_source" ? (
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
+            Consent is collected upstream at the landing page or lead form, and recorded on each lead
+            at intake as <code>inherited_upstream</code>. Nothing blocks here. Naming the origin below
+            is optional, and only makes the audit trail easier to read later.
+          </p>
         ) : (
           <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-            Not recorded. Intake mints a per-lead consent record from this declaration, so leads
-            arriving without their own consent are suppressed until it is set.
+            This campaign requires an explicit consent record per lead. Leads arriving without one are
+            suppressed until a basis is declared here.
           </p>
         )}
 
