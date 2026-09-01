@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
-import { encryptPii } from "@/lib/crypto/pii";
+import { decryptPiiOrNull, encryptPii } from "@/lib/crypto/pii";
+import { suppressLead } from "@/lib/leads/eligibility";
 import { decideRetry, retryPolicyFromConfig, type CallOutcome } from "@/lib/calling/retry";
 import { auditInTx } from "@/lib/audit";
 import type { NormalizedWebhook } from "@/lib/providers/voice/types";
@@ -80,6 +81,44 @@ export async function recordCallResult(
       has_transcript: Boolean(webhook.transcript),
     },
   });
+
+  // A carrier-reported permanent condition - NDNC/DND registration, a number
+  // that does not exist - stops all future attempts rather than feeding the
+  // retry ladder. Handled before the retry decision, because the ladder would
+  // otherwise schedule a call that must never happen (PRD 17.4).
+  if (webhook.suppress) {
+    const phone = decryptPiiOrNull(
+      (
+        await tx.query<{ phone_enc: Buffer | null }>(`select phone_enc from leads where id = $1`, [
+          c.lead_id,
+        ])
+      ).rows[0]?.phone_enc ?? null,
+    );
+
+    await suppressLead(tx, {
+      tenantId: args.tenantId,
+      leadId: c.lead_id,
+      phoneE164: phone,
+      reason: webhook.suppress.reason,
+      source: "voice_detected",
+    });
+
+    await auditInTx(tx, {
+      tenantId: args.tenantId,
+      actorType: "service",
+      action: "lead.carrier_suppressed",
+      entityType: "lead",
+      entityId: c.lead_id,
+      metadata: {
+        call_id: c.id,
+        reason: webhook.suppress.reason,
+        failure_reason: webhook.failureReason ?? null,
+        provider: args.provider,
+      },
+    });
+
+    return { status: "recorded", callId: c.id, needsAnalysis: false };
+  }
 
   // A connected call goes to qualification; anything else goes straight to the
   // retry ladder, since there is no conversation to analyse.

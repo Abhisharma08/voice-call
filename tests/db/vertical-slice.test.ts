@@ -545,6 +545,67 @@ describe("call results and retries (FR-023, FR-024, PRD 18.1)", () => {
     expect(transcripts).toBe(1);
   });
 
+  it("permanently suppresses a lead the carrier reports as NDNC-registered", async () => {
+    // The Sarvam adapter classifies "registered under TRAI NDNC" as a legal
+    // suppression rather than a failed call. This asserts the platform half:
+    // the lead goes on the tenant DNC list and cannot be re-queued.
+    await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
+    const tick = await withScope(scope, (tx) =>
+      runCallingTick(tx, {
+        tenantId: TENANT,
+        campaignId: CAMPAIGN,
+        workerId: "w1",
+        webhookBaseUrl: "http://localhost:3000",
+      }),
+    );
+
+    const leadId = tick.dialled[0]!.leadId;
+    const providerCallId = tick.dialled[0]!.providerCallId!;
+
+    await withScope(scope, (tx) =>
+      recordCallResult(tx, {
+        tenantId: TENANT,
+        provider: "mock",
+        webhook: {
+          providerCallId,
+          status: "failed",
+          failureReason: "exotel: Phone number is registered under TRAI NDNC",
+          suppress: { reason: "trai_ndnc_registered", permanent: true },
+        },
+      }),
+    );
+
+    const lead = await withScope(scope, async (tx) =>
+      (
+        await tx.query<{ status: string; dnc: boolean; next_call_at: Date | null }>(
+          `select status, dnc, next_call_at from leads where id = $1`,
+          [leadId],
+        )
+      ).rows[0],
+    );
+
+    expect(lead?.status).toBe("suppressed");
+    expect(lead?.dnc).toBe(true);
+    expect(lead?.next_call_at).toBeNull();
+
+    // A fresh inbound event must not resurrect it.
+    const requeue = await withScope(scope, (tx) =>
+      ingestLead(tx, leadEvent("+919876543210", { recordId: "hs-retry" })),
+    );
+    expect(requeue.status).not.toBe("queued");
+
+    const audit = await withScope(scope, async (tx) =>
+      (
+        await tx.query<{ metadata: Record<string, unknown> }>(
+          `select metadata from audit_events
+            where action = 'lead.carrier_suppressed' and entity_id = $1`,
+          [leadId],
+        )
+      ).rows[0],
+    );
+    expect(audit?.metadata.reason).toBe("trai_ndnc_registered");
+  });
+
   it("schedules a retry after a no-answer", async () => {
     stubAnthropic(() => unknownResult("unused"));
     // Numbers ending in 1 produce a no-answer from the mock provider.
