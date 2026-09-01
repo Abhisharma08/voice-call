@@ -30,7 +30,7 @@ export default async function IntegrationsPage() {
 
   const tenantId = user.activeTenantId;
 
-  const { integrations, spreadsheetId } = await withTenant(user, tenantId, async (tx) => {
+  const { integrations, spreadsheetId, sheetRange } = await withTenant(user, tenantId, async (tx) => {
     const r = await tx.query<{
       id: string;
       type: string;
@@ -54,12 +54,16 @@ export default async function IntegrationsPage() {
 
     // The Sheets test needs a real spreadsheet to reach for; take the first one
     // any campaign points at.
-    const sheet = await tx.query<{ google_sheet_id: string }>(
-      `select google_sheet_id from campaigns
+    const sheet = await tx.query<{ google_sheet_id: string; google_sheet_tab: string | null }>(
+      `select google_sheet_id, google_sheet_tab from campaigns
         where google_sheet_id is not null order by created_at limit 1`,
     );
 
-    return { integrations: r.rows, spreadsheetId: sheet.rows[0]?.google_sheet_id ?? null };
+    return {
+      integrations: r.rows,
+      spreadsheetId: sheet.rows[0]?.google_sheet_id ?? null,
+      sheetRange: sheet.rows[0]?.google_sheet_tab ?? null,
+    };
   });
 
   return (
@@ -107,6 +111,7 @@ export default async function IntegrationsPage() {
                   tenantId={tenantId}
                   integrationId={i.id}
                   spreadsheetId={spreadsheetId}
+                  sheetRange={sheetRange}
                 />
               ) : null}
             </div>

@@ -12,10 +12,12 @@ export function TestConnection({
   tenantId,
   integrationId,
   spreadsheetId,
+  sheetRange,
 }: {
   tenantId: string;
   integrationId: string;
   spreadsheetId: string | null;
+  sheetRange: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -35,6 +37,7 @@ export function TestConnection({
           data.set("tenantId", tenantId);
           data.set("integrationId", integrationId);
           if (spreadsheetId) data.set("spreadsheetId", spreadsheetId);
+          if (sheetRange) data.set("sheetRange", sheetRange);
 
           const result = await testIntegration(data);
           setReport(result.ok ? result.data : { ok: false, summary: result.error, details: [] });

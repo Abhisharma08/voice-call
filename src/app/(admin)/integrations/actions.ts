@@ -5,7 +5,7 @@ import { z } from "zod";
 import { failure, success, tenantAction, type ActionResult } from "@/lib/actions";
 import type { SealedSecret } from "@/lib/crypto/kms";
 import { HubSpotClient, IntegrationError } from "@/lib/integrations/hubspot";
-import { GoogleSheetsClient } from "@/lib/integrations/google-sheets";
+import { GoogleSheetsClient, splitRange } from "@/lib/integrations/google-sheets";
 
 /**
  * Verify a stored credential, and bootstrap whatever the far end needs.
@@ -28,6 +28,7 @@ const Test = z.object({
   tenantId: z.string().uuid(),
   integrationId: z.string().uuid(),
   spreadsheetId: z.string().max(200).nullable().optional(),
+  sheetRange: z.string().max(200).nullable().optional(),
 });
 
 export interface ConnectionReport {
@@ -41,10 +42,11 @@ export async function testIntegration(formData: FormData): Promise<ActionResult<
     tenantId: formData.get("tenantId"),
     integrationId: formData.get("integrationId"),
     spreadsheetId: formData.get("spreadsheetId") || null,
+    sheetRange: formData.get("sheetRange") || null,
   });
   if (!parsed.success) return failure("Invalid request");
 
-  const { tenantId, integrationId, spreadsheetId } = parsed.data;
+  const { tenantId, integrationId, spreadsheetId, sheetRange } = parsed.data;
 
   return tenantAction({ tenantId, permission: "integration:write" }, async (ctx) => {
     const row = await ctx.tx.query<{
@@ -78,7 +80,7 @@ export async function testIntegration(formData: FormData): Promise<ActionResult<
         record.type === "hubspot"
           ? await testHubSpot(sealed)
           : record.type === "google_sheets"
-            ? await testSheets(sealed, spreadsheetId)
+            ? await testSheets(sealed, spreadsheetId, sheetRange)
             : { ok: false, summary: `No connection test for ${record.type} yet`, details: [] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -141,6 +143,7 @@ async function testHubSpot(sealed: SealedSecret): Promise<ConnectionReport> {
 async function testSheets(
   sealed: SealedSecret,
   spreadsheetId: string | null | undefined,
+  sheetRange: string | null | undefined,
 ): Promise<ConnectionReport> {
   const client = GoogleSheetsClient.fromSealedSecret(sealed);
 
@@ -153,15 +156,20 @@ async function testSheets(
     );
   }
 
-  const info = await client.verifyConnection(spreadsheetId);
-  const header = await client.ensureHeaderRow(spreadsheetId, "Call Log!A:V");
+  // Use the campaign's configured range. Testing a hardcoded one proves
+  // nothing about the destination the sync will actually write to.
+  const range = sheetRange ?? "Call Log!A:V";
+  const { tab } = splitRange(range);
 
-  return {
-    ok: true,
-    summary: `Spreadsheet "${info.title}" reachable`,
-    details: [
-      `Tabs: ${info.tabs.join(", ")}`,
-      header === "written" ? "Wrote the Call Log header row." : "Header row already present.",
-    ],
-  };
+  const info = await client.verifyConnection(spreadsheetId);
+  const before = info.tabs.slice();
+  const header = await client.ensureHeaderRow(spreadsheetId, range);
+
+  const details = [`Tabs: ${before.join(", ")}`];
+  if (!before.includes(tab)) details.push(`Created the "${tab}" tab.`);
+  details.push(
+    header === "written" ? `Wrote the header row to "${tab}".` : `Header row already present in "${tab}".`,
+  );
+
+  return { ok: true, summary: `Spreadsheet "${info.title}" reachable`, details };
 }
