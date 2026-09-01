@@ -250,6 +250,55 @@ number the registry says must not be called.
 would let a caller believe a call in progress had been stopped. Suppression
 still applies to every future attempt.
 
+### Twilio (local testing)
+
+Telephony only — Twilio dials and plays audio; the conversation is TwiML this
+platform serves. Enough to exercise the whole pipeline against a phone that
+actually rings, and no substitute for a production voice agent.
+
+```
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_FROM_NUMBER=+1...
+APP_URL=https://your-tunnel.example.com    # Twilio must reach this
+VOICE_WEBHOOK_SECRET=<long random string>
+```
+
+Registers when the first three are set. Then **Voice provider → `twilio`** on
+the campaign. No callback URL to configure in the Twilio console — the adapter
+passes `Url` and `StatusCallback` on each call.
+
+**How the conversation works.** `createCall` points Twilio at
+`/api/webhooks/voice/twilio/twiml`. That endpoint speaks the opening script and
+the first question, `<Gather input="speech">` captures the answer, and the next
+request asks the next question. Each turn is appended to the call's transcript,
+so by the time the status callback reports `completed` there is a real
+conversation for qualification to read.
+
+It is deliberately simple: no barge-in, no clarification, no recovery from a
+misheard answer. It reads a question, waits, moves on.
+
+**Authentication.** Twilio signs with `X-Twilio-Signature` — HMAC-SHA1 over the
+full request URL plus every POST parameter sorted by name. Both endpoints
+verify it. A carrier cannot attach a bearer service token to a status callback,
+so for Twilio the signature *is* the credential and the tenant is resolved from
+the call record the SID names. The TwiML endpoint additionally checks a
+call-bound token in the URL, so it cannot be driven for an arbitrary call.
+
+**India.** Twilio's guidance restricts outbound calls to Indian non-Twilio
+numbers to non-Indian originating numbers [PRD Ref. 7]. That applies to any
+stack where Twilio is the carrier — **including ElevenLabs**, which brings no
+numbers of its own. It is the reason Sarvam is the production option here.
+
+### ElevenLabs
+
+ElevenLabs Agents is a voice-AI layer, not a carrier: you bring a Twilio number
+or a SIP trunk. So a Twilio account is needed either way, and the number set up
+for local testing carries forward.
+
+No adapter yet. Their outbound call surface would slot in as a sixth
+`VoiceProvider` implementation the same way Sarvam did.
+
 ### Testing with a free trial account
 
 Every provider's free trial restricts outbound calls to **numbers you have
@@ -261,11 +310,12 @@ be rented at all.
 So a trial answers exactly one question — *does my phone actually ring, and does
 the transcript come back* — and cannot be used to call a real lead list.
 
-| Provider | Trial | India outbound |
-| --- | --- | --- |
-| Sarvam | KYC required before renting a number; no documented trial tier | Native — Indian carriers |
-| Twilio | Free credit, trial number, verified numbers only | Restricted: calls to Indian non-Twilio numbers must originate from non-Indian numbers [PRD Ref. 7] |
-| Plivo / Telnyx / Vonage | Free credit, verified numbers only | Varies; check per-country rules |
+| Provider | Gives you a number? | Trial | India outbound |
+| --- | --- | --- | --- |
+| Sarvam | Yes, after KYC | No documented trial tier | Native — Indian carriers |
+| Twilio | Yes | Free credit, verified numbers only | Restricted: Indian non-Twilio numbers need a non-Indian originating number [PRD Ref. 7] |
+| ElevenLabs | **No** — bring Twilio or SIP | n/a | Inherits whatever the underlying carrier allows |
+| Plivo / Telnyx / Vonage | Yes | Free credit, verified numbers only | Varies; check per-country rules |
 
 Since the constraint is real, the platform mirrors it. Set **Dial allowlist**
 on the campaign to the E.164 numbers verified on your trial account:
@@ -420,6 +470,10 @@ PostgreSQL, it is outside the platform's access-control layer.
 | Trial call connects but cuts off | Twilio trial calls are capped at 10 minutes |
 | Only 5 leads dialled | `concurrency_limit` on the campaign (FR-022). Working as intended |
 | `Unknown voice provider "sarvam"` | Not all six `SARVAM_*` vars are set, or the server was not restarted |
+| `Unknown voice provider "twilio"` | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` or `TWILIO_FROM_NUMBER` missing, or no restart |
+| Twilio: "the destination number is not verified" | Trial account. Verify the number in the Twilio console and add it to the dial allowlist |
+| Twilio call rings but the transcript is empty | `APP_URL` is not publicly reachable, so Twilio could not fetch the TwiML |
+| Twilio status callbacks rejected as invalid signature | `APP_URL` does not match the URL Twilio actually called — the signature covers the URL |
 | Sarvam call results never arrive | `APP_URL` stale, or the agent's webhook is not pointed at `/api/webhooks/voice/sarvam` |
 | Lead suppressed as `trai_ndnc_registered` | The number is on India's NDNC registry. Correct and permanent |
 

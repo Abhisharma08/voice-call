@@ -227,7 +227,11 @@ export class SarvamVoiceProvider implements VoiceProvider {
    * this as defence in depth, and put the callback URL behind a network
    * allowlist in production if the provider offers source IPs.
    */
-  handleWebhook(rawBody: string, _headers: Record<string, string>): NormalizedWebhook {
+  handleWebhook(
+    rawBody: string,
+    _headers: Record<string, string>,
+    _requestUrl?: string,
+  ): NormalizedWebhook {
     let payload: SarvamWebhookPayload;
     try {
       payload = JSON.parse(rawBody) as SarvamWebhookPayload;

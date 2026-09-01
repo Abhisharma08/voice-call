@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { withScope, withoutScope } from "@/db/client";
 import { authenticateService, withServiceScope } from "@/lib/auth/service";
 import { resolveProvider } from "@/lib/providers/voice";
-import { ProviderError } from "@/lib/providers/voice/types";
+import { ProviderError, type NormalizedWebhook } from "@/lib/providers/voice/types";
 import { recordCallResult } from "@/lib/calling/results";
 import { recordUnscopedAudit } from "@/lib/audit";
 
@@ -10,21 +11,25 @@ export const runtime = "nodejs";
 /**
  * Voice provider callbacks (W02 step 6, FR-023).
  *
- * The provider adapter verifies the signature and normalises the payload, so
- * nothing vendor-specific reaches the platform. PRD 18.2: "Webhook signature
- * invalid - No - Reject + security log."
+ * Two authentication paths, because carriers and API providers differ:
+ *
+ *   A provider that signs its callbacks (Twilio) authenticates itself. It
+ *   cannot attach a bearer token - Twilio posts a status callback, it does not
+ *   hold our credentials - so the signature is the credential, and the tenant
+ *   is resolved from the call record the SID names.
+ *
+ *   A provider that does not sign (Sarvam) must also present a service token,
+ *   which is where its tenant comes from.
+ *
+ * Either way the adapter verifies first and normalises second, so nothing
+ * vendor-specific reaches the platform. PRD 18.2: "Webhook signature invalid -
+ * No - Reject + security log."
  */
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ provider: string }> },
 ) {
   const { provider: providerName } = await context.params;
-
-  const identity = await authenticateService(request, "calls:result");
-  if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const rawBody = await request.text();
-  const headers = Object.fromEntries(request.headers.entries());
 
   let provider;
   try {
@@ -33,12 +38,15 @@ export async function POST(
     return NextResponse.json({ error: "Unknown provider" }, { status: 404 });
   }
 
-  let webhook;
+  const rawBody = await request.text();
+  const headers = Object.fromEntries(request.headers.entries());
+
+  let webhook: NormalizedWebhook;
   try {
-    webhook = provider.handleWebhook(rawBody, headers);
+    webhook = provider.handleWebhook(rawBody, headers, request.url);
   } catch (err) {
     await recordUnscopedAudit({
-      tenantId: identity.tenantId,
+      tenantId: null,
       actorType: "system",
       action: "webhook.signature_rejected",
       entityType: "provider",
@@ -48,43 +56,32 @@ export async function POST(
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
+  const identity = await authenticateService(request, "calls:result");
+  const selfAuthenticating = provider.metadata().verifiesWebhookSignature === true;
+
+  if (!identity && !selfAuthenticating) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // For a self-authenticating provider the call record is what ties this
+  // callback to a tenant. A SID we have no record of is acknowledged, not
+  // trusted.
+  const tenantId =
+    identity?.tenantId ??
+    (await tenantForCall(providerName, webhook.providerCallId));
+
+  if (!tenantId) {
+    return NextResponse.json({ status: "ignored" }, { status: 202 });
+  }
+
   try {
-    const outcome = await withServiceScope(identity, async (tx) => {
-      // PRD 18.1: call result idempotency key = provider + provider_call_id.
-      const idempotencyKey = `voice:${providerName}:${webhook.providerCallId}:${webhook.status}`;
-
-      const claim = await tx.query<{ id: string }>(
-        `insert into webhook_events
-           (tenant_id, source, event_type, idempotency_key, payload)
-         values ($1, $2, 'call_status', $3, $4)
-         on conflict (tenant_id, idempotency_key) do nothing
-         returning id`,
-        [identity.tenantId, providerName, idempotencyKey, JSON.stringify(webhook)],
-      );
-
-      if (claim.rowCount === 0) return { status: "duplicate" as const, callId: null, needsAnalysis: false };
-
-      const result = await recordCallResult(tx, {
-        tenantId: identity.tenantId,
-        provider: providerName,
-        webhook,
-      });
-
-      await tx.query(
-        `update webhook_events set status = 'processed', processed_at = now(), result = $2
-          where id = $1`,
-        [claim.rows[0]!.id, JSON.stringify(result)],
-      );
-
-      return result;
-    });
+    const outcome = await process(providerName, tenantId, webhook);
 
     if (outcome.status === "unknown_call") {
       // Acknowledge rather than 404: a provider that gets an error will retry
       // forever for a call we genuinely do not have.
       return NextResponse.json({ status: "ignored" }, { status: 202 });
     }
-
     return NextResponse.json(outcome, { status: 202 });
   } catch (err) {
     if (err instanceof ProviderError) {
@@ -100,4 +97,59 @@ export async function POST(
     );
     return NextResponse.json({ error: "Webhook processing failed" }, { status: 500 });
   }
+}
+
+/** Resolve the owning tenant from the call the provider's id names. */
+async function tenantForCall(provider: string, providerCallId: string): Promise<string | null> {
+  return withoutScope(async (tx) => {
+    const r = await tx.query<{ tenant_id: string }>(
+      `select tenant_id from call_attempts where provider = $1 and provider_call_id = $2`,
+      [provider, providerCallId],
+    );
+    return r.rows[0]?.tenant_id ?? null;
+  });
+}
+
+async function process(providerName: string, tenantId: string, webhook: NormalizedWebhook) {
+  const scope = {
+    tenantId,
+    globalScope: false,
+    actorId: null,
+    actorType: "service" as const,
+  };
+
+  const run = async (tx: Parameters<Parameters<typeof withScope>[1]>[0]) => {
+    // PRD 18.1: call result idempotency key = provider + provider_call_id.
+    // The status is part of the key because a provider reports several
+    // interim events per call, and each is a distinct fact.
+    const idempotencyKey = `voice:${providerName}:${webhook.providerCallId}:${webhook.status}`;
+
+    const claim = await tx.query<{ id: string }>(
+      `insert into webhook_events (tenant_id, source, event_type, idempotency_key, payload)
+       values ($1, $2, 'call_status', $3, $4)
+       on conflict (tenant_id, idempotency_key) do nothing
+       returning id`,
+      [tenantId, providerName, idempotencyKey, JSON.stringify(webhook)],
+    );
+
+    if (claim.rowCount === 0) {
+      return { status: "duplicate" as const, callId: null, needsAnalysis: false };
+    }
+
+    const result = await recordCallResult(tx, {
+      tenantId,
+      provider: providerName,
+      webhook,
+    });
+
+    await tx.query(
+      `update webhook_events set status = 'processed', processed_at = now(), result = $2
+        where id = $1`,
+      [claim.rows[0]!.id, JSON.stringify(result)],
+    );
+
+    return result;
+  };
+
+  return withScope(scope, run, "service");
 }

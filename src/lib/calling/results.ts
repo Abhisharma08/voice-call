@@ -122,7 +122,19 @@ export async function recordCallResult(
 
   // A connected call goes to qualification; anything else goes straight to the
   // retry ladder, since there is no conversation to analyse.
-  const connected = webhook.status === "completed" && Boolean(webhook.transcript);
+  //
+  // The transcript may arrive on the webhook (Sarvam, mock) or have been
+  // written during the call by the provider's own conversation endpoint
+  // (Twilio's TwiML turns). Either counts - what matters is that a
+  // conversation exists to read.
+  const storedTranscript = await tx.query(
+    `select 1 from call_transcripts where call_id = $1 limit 1`,
+    [c.id],
+  );
+
+  const connected =
+    webhook.status === "completed" &&
+    (Boolean(webhook.transcript) || (storedTranscript.rowCount ?? 0) > 0);
 
   if (connected) {
     await tx.query(`update leads set status = 'awaiting_analysis' where id = $1`, [c.lead_id]);
