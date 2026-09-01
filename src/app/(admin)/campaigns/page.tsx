@@ -39,13 +39,14 @@ export default async function CampaignsPage() {
       voice_provider: string;
       timezone: string;
       calling_config: { window_start?: string; window_end?: string };
+      dial_allowlist: string[];
       questions: string;
       leads: string;
       queued: string;
     }>(
       `select c.id, c.name, c.domain, c.active, c.config_version,
               c.compliance_approved_at, c.consent_basis, c.voice_provider, c.timezone,
-              c.calling_config,
+              c.calling_config, c.dial_allowlist,
               (select count(*) from qualification_rules q where q.campaign_id = c.id) as questions,
               (select count(*) from leads l where l.campaign_id = c.id)               as leads,
               (select count(*) from leads l where l.campaign_id = c.id and l.status = 'queued') as queued
@@ -92,6 +93,12 @@ export default async function CampaignsPage() {
                   <span className="pill">{c.voice_provider}</span>
                   <span className="pill">{c.leads} leads</span>
                   {Number(c.queued) > 0 ? <span className="pill">{c.queued} queued</span> : null}
+                  {c.dial_allowlist.length > 0 ? (
+                    <span className="pill warn">
+                      allowlist: {c.dial_allowlist.length} number
+                      {c.dial_allowlist.length === 1 ? "" : "s"}
+                    </span>
+                  ) : null}
                 </div>
 
                 {/* Say plainly why a campaign cannot call, rather than showing

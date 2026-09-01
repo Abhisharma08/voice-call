@@ -74,6 +74,13 @@ export const CampaignConfigSchema = z
     googleSheetId: z.string().max(200).nullable(),
     googleSheetTab: z.string().max(200).nullable(),
     hubspotIntegrationId: z.string().uuid().nullable(),
+    /**
+     * E.164 numbers this campaign may dial. Empty = unrestricted.
+     * Non-empty restricts it to a trial provider's verified numbers.
+     */
+    dialAllowlist: z
+      .array(z.string().regex(/^\+[1-9]\d{6,14}$/, "Use E.164, e.g. +919876543210"))
+      .max(25),
     callingConfig: CallingConfigSchema,
     routingConfig: RoutingConfigSchema,
     scoringRubric: ScoringRubricSchema,
@@ -127,6 +134,7 @@ export const DEFAULT_CAMPAIGN_CONFIG: Omit<CampaignConfig, "name"> = {
   googleSheetId: null,
   googleSheetTab: "Call Log!A:V",
   hubspotIntegrationId: null,
+  dialAllowlist: [],
   callingConfig: {
     window_start: "09:30",
     window_end: "18:30",
@@ -156,7 +164,7 @@ export async function loadCampaignConfig(
     `select id, name, domain, business_context, script, timezone, voice_provider,
             analysis_model, analysis_effort, concurrency_limit,
             review_confidence_threshold, review_boundary_band,
-            google_sheet_id, google_sheet_tab, hubspot_integration_id,
+            google_sheet_id, google_sheet_tab, hubspot_integration_id, dial_allowlist,
             calling_config, routing_config, scoring_rubric, config_version, active
        from campaigns where id = $1`,
     [campaignId],
@@ -194,6 +202,7 @@ export async function loadCampaignConfig(
     googleSheetId: (c.google_sheet_id as string | null) ?? null,
     googleSheetTab: (c.google_sheet_tab as string | null) ?? null,
     hubspotIntegrationId: (c.hubspot_integration_id as string | null) ?? null,
+    dialAllowlist: (c.dial_allowlist as string[] | null) ?? [],
     callingConfig: { ...DEFAULT_CAMPAIGN_CONFIG.callingConfig, ...(c.calling_config as object) },
     routingConfig: { ...DEFAULT_CAMPAIGN_CONFIG.routingConfig, ...(c.routing_config as object) },
     scoringRubric: { ...DEFAULT_CAMPAIGN_CONFIG.scoringRubric, ...(c.scoring_rubric as object) },
@@ -232,6 +241,7 @@ export async function saveCampaignConfig(
         concurrency_limit = $11, review_confidence_threshold = $12, review_boundary_band = $13,
         google_sheet_id = $14, google_sheet_tab = $15, hubspot_integration_id = $16,
         calling_config = $17::jsonb, routing_config = $18::jsonb, scoring_rubric = $19::jsonb,
+        dial_allowlist = $21,
         config_version = config_version + 1,
         updated_by = $20
       where id = $1 and tenant_id = $2
@@ -257,6 +267,7 @@ export async function saveCampaignConfig(
       JSON.stringify(config.routingConfig),
       JSON.stringify(config.scoringRubric),
       args.userId,
+      config.dialAllowlist,
     ],
   );
 

@@ -328,6 +328,40 @@ export function CampaignEditor({
         </Row>
       </Section>
 
+      <Section
+        title="Dial allowlist"
+        hint="Leave empty in production. Fill it in when the provider account is a free trial, which can only reach numbers verified on it."
+      >
+        <Field label="Only dial these numbers (E.164, one per line)">
+          <textarea
+            rows={3}
+            value={config.dialAllowlist.join("\n")}
+            disabled={readOnly}
+            placeholder="+919876543210"
+            onChange={(e) =>
+              set(
+                "dialAllowlist",
+                e.target.value
+                  .split("\n")
+                  .map((v) => v.trim())
+                  .filter((v) => v !== ""),
+              )
+            }
+            style={textarea}
+          />
+        </Field>
+        {config.dialAllowlist.length > 0 ? (
+          <div className="row" style={{ gap: 8 }}>
+            <span className="pill warn">restricted</span>
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>
+              Every other lead on this campaign is suppressed as{" "}
+              <code>not_on_dial_allowlist</code> before a call is placed. Clear this before going
+              live.
+            </span>
+          </div>
+        ) : null}
+      </Section>
+
       <Section title="Analysis" hint="The model that reads transcripts and how hard it thinks.">
         <Row>
           <Field label="Model">

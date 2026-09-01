@@ -250,6 +250,45 @@ number the registry says must not be called.
 would let a caller believe a call in progress had been stopped. Suppression
 still applies to every future attempt.
 
+### Testing with a free trial account
+
+Every provider's free trial restricts outbound calls to **numbers you have
+verified on the account**. Twilio states it plainly: "Outbound trial calls can
+only be placed to a validated phone number", with a 10-minute cap and a trial
+notice played before the call connects. Sarvam requires KYC before a number can
+be rented at all.
+
+So a trial answers exactly one question — *does my phone actually ring, and does
+the transcript come back* — and cannot be used to call a real lead list.
+
+| Provider | Trial | India outbound |
+| --- | --- | --- |
+| Sarvam | KYC required before renting a number; no documented trial tier | Native — Indian carriers |
+| Twilio | Free credit, trial number, verified numbers only | Restricted: calls to Indian non-Twilio numbers must originate from non-Indian numbers [PRD Ref. 7] |
+| Plivo / Telnyx / Vonage | Free credit, verified numbers only | Varies; check per-country rules |
+
+Since the constraint is real, the platform mirrors it. Set **Dial allowlist**
+on the campaign to the E.164 numbers verified on your trial account:
+
+```
++919876543210
+```
+
+While it is non-empty, every other lead is suppressed as
+`not_on_dial_allowlist` **before a call is placed**. Without that, a trial
+account pointed at a real list fails at the carrier on every number, consuming
+one attempt from each lead's retry budget and filling the queue with opaque
+provider errors — and a half-configured staging environment can dial real
+people.
+
+The campaign list shows an `allowlist: N numbers` badge while it is set. Clear
+it before going live.
+
+**A trial is not the cheapest way to test the pipeline.** The `mock` provider
+already exercises intake, queue, retries, DNC, qualification, review and sync
+end-to-end at no cost — `npm run demo`. Reach for a trial only when you want to
+confirm the audio path itself.
+
 ### Writing another adapter
 
 Implement `VoiceProvider` in `src/lib/providers/voice/types.ts` — six methods:
@@ -377,6 +416,8 @@ PostgreSQL, it is outside the platform's access-control layer.
 | Campaign will not activate | Open items on the compliance checklist |
 | Leads suppressed as `no_consent` | The campaign is set to `require_record` and no basis is declared. Switch it to `inherit_from_source` if consent comes from the funnel |
 | Leads suppressed as `consent_withdrawn` | A `consents` row for that lead is marked withdrawn. Correct under either mode |
+| Leads suppressed as `not_on_dial_allowlist` | The campaign has a dial allowlist set, for a trial provider account. Clear it to go live |
+| Trial call connects but cuts off | Twilio trial calls are capped at 10 minutes |
 | Only 5 leads dialled | `concurrency_limit` on the campaign (FR-022). Working as intended |
 | `Unknown voice provider "sarvam"` | Not all six `SARVAM_*` vars are set, or the server was not restarted |
 | Sarvam call results never arrive | `APP_URL` stale, or the agent's webhook is not pointed at `/api/webhooks/voice/sarvam` |

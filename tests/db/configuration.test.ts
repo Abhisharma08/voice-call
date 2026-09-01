@@ -90,7 +90,8 @@ beforeEach(async () => {
     await owner.query(
       `update campaigns set compliance_approved_at = null, compliance_approved_by = null,
               consent_basis = null, consent_source = null, active = false,
-              consent_mode = 'require_record', consent_origin = null
+              consent_mode = 'require_record', consent_origin = null,
+              dial_allowlist = '{}'
         where tenant_id = $1`,
       [TENANT],
     );
@@ -552,6 +553,99 @@ describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", 
 
     expect(consent?.basis).toBe("existing_customer");
     expect(consent?.captured_by).toBe("client_supplied");
+  });
+});
+
+describe("dial allowlist (trial provider accounts)", () => {
+  async function readyWithAllowlist(numbers: string[]) {
+    await asGlobal(() =>
+      owner.query(
+        `update campaigns set consent_mode = 'inherit_from_source',
+                compliance_approved_at = now(), active = true,
+                dial_allowlist = $2,
+                calling_config = jsonb_set(
+                  jsonb_set(calling_config, '{window_start}', '"00:00"'),
+                  '{window_end}', '"23:59"')
+          where id = $1`,
+        [CAMPAIGN_A, numbers],
+      ),
+    );
+  }
+
+  function lead(phone: string, recordId: string) {
+    return {
+      tenantId: TENANT,
+      campaignId: CAMPAIGN_A,
+      source: "hubspot",
+      recordId,
+      contact: { phone },
+      consent: null,
+      correlationId: null,
+    };
+  }
+
+  it("queues a number that is on the allowlist", async () => {
+    await readyWithAllowlist(["+919876543210"]);
+    const outcome = await withScope(scope, (tx) =>
+      ingestLead(tx, lead("+919876543210", "hs-allowed")),
+    );
+    expect(outcome.status).toBe("queued");
+  });
+
+  it("suppresses a number that is not, before a call is placed", async () => {
+    // A trial provider would fail this at the carrier and consume an attempt
+    // from the lead's retry budget. Catching it here keeps the reason legible.
+    await readyWithAllowlist(["+919876543210"]);
+    const outcome = await withScope(scope, (tx) =>
+      ingestLead(tx, lead("+919999999999", "hs-blocked")),
+    );
+
+    expect(outcome.status).toBe("suppressed");
+    if (outcome.status === "suppressed") {
+      expect(outcome.reason).toBe("not_on_dial_allowlist");
+    }
+  });
+
+  it("applies again at claim time, not only at intake", async () => {
+    // The allowlist can be narrowed after a lead is already queued.
+    await readyWithAllowlist([]);
+    const outcome = await withScope(scope, (tx) =>
+      ingestLead(tx, lead("+919999999999", "hs-late")),
+    );
+    expect(outcome.status).toBe("queued");
+
+    await readyWithAllowlist(["+919876543210"]);
+
+    const claim = await withScope(scope, (tx) =>
+      claimLeads(tx, { tenantId: TENANT, campaignId: CAMPAIGN_A, workerId: "w" }),
+    );
+    expect(claim.claimed).toHaveLength(0);
+    expect(claim.skipped[0]?.detail).toBe("not_on_dial_allowlist");
+  });
+
+  it("does not restrict anything when empty", async () => {
+    await readyWithAllowlist([]);
+    const outcome = await withScope(scope, (tx) =>
+      ingestLead(tx, lead("+919999999999", "hs-open")),
+    );
+    expect(outcome.status).toBe("queued");
+  });
+
+  it("matches on the normalised E.164 form, not the raw input", async () => {
+    // The lead arrives as "098765 43210"; the allowlist holds E.164.
+    await readyWithAllowlist(["+919876543210"]);
+    const outcome = await withScope(scope, (tx) =>
+      ingestLead(tx, lead("098765 43210", "hs-normalised")),
+    );
+    expect(outcome.status).toBe("queued");
+  });
+
+  it("rejects a non-E.164 entry at save time", () => {
+    const parsed = CampaignConfigSchema.safeParse({
+      ...baseConfig,
+      dialAllowlist: ["9876543210"],
+    });
+    expect(parsed.success).toBe(false);
   });
 });
 

@@ -18,6 +18,7 @@ export type SuppressionReason =
   | "consent_withdrawn"
   | "campaign_inactive"
   | "campaign_not_compliance_approved"
+  | "not_on_dial_allowlist"
   | "tenant_inactive"
   | "max_attempts_reached";
 
@@ -97,8 +98,10 @@ export async function checkEligibility(
     consent_mode: "require_record" | "inherit_from_source";
     compliance_approved_at: Date | null;
     calling_config: { max_attempts?: number };
+    dial_allowlist: string[];
   }>(
-    `select active, service_call_campaign, consent_mode, compliance_approved_at, calling_config
+    `select active, service_call_campaign, consent_mode, compliance_approved_at,
+            calling_config, dial_allowlist
        from campaigns where id = $1`,
     [campaignId],
   );
@@ -117,6 +120,20 @@ export async function checkEligibility(
       reason: "campaign_not_compliance_approved",
       detail: "Campaign has not passed compliance review (PRD 17.3)",
     };
+  }
+
+  // A trial provider account can only reach numbers verified on it, so an
+  // unverified lead would fail at the carrier and consume an attempt. Checked
+  // here, before a call is placed, so the reason is legible rather than an
+  // opaque provider error.
+  if (c.dial_allowlist.length > 0) {
+    if (!phoneE164 || !c.dial_allowlist.includes(phoneE164)) {
+      return {
+        eligible: false,
+        reason: "not_on_dial_allowlist",
+        detail: `This campaign is restricted to ${c.dial_allowlist.length} verified number(s)`,
+      };
+    }
   }
 
   const maxAttempts = c.calling_config?.max_attempts ?? 3;
