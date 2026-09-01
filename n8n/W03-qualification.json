@@ -1,0 +1,116 @@
+{
+  "name": "W03 - Qualification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "call-completed",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "w03-webhook",
+      "name": "Call Completed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-180, 0],
+      "webhookId": "w03-call-completed",
+      "notes": "Triggered by the platform after a connected call is recorded. The provider posts to /api/webhooks/voice/{provider}; that endpoint owns the transcript and the retry ladder."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.PLATFORM_URL }}/api/internal/analyze",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ call_id: $json.body.call_id }) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "w03-analyze",
+      "name": "Qualify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [40, 0],
+      "notes": "Runs the LLM analysis, validates it against the strict schema (FR-031), scores it against the campaign rubric, and applies the review gate (FR-035). One analysis per call - a duplicate execution returns the existing one."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "version": 2 },
+          "conditions": [
+            {
+              "id": "held",
+              "leftValue": "={{ $json.body.reviewStatus }}",
+              "rightValue": "pending_review",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w03-gate",
+      "name": "Held for review?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [260, 0],
+      "notes": "PRD 26.3: a held result is excluded from HubSpot and Sheets until an operator confirms or corrects it."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Held. Nothing syncs. The item is already in the platform's review queue;\n// this branch exists so the Ops alerting channel sees the backlog build\n// (PRD 18.3 / 26.3 SLA escalation).\nreturn [{ json: { review_required: true, analysis: $input.first().json.body } }];"
+      },
+      "id": "w03-review",
+      "name": "Awaiting Human Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, -110]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.PLATFORM_URL }}/api/internal/sync",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ limit: 25 }) }}",
+        "options": { "response": { "response": { "neverError": true, "fullResponse": true } } }
+      },
+      "id": "w03-sync",
+      "name": "Drain Sync Outbox",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 90],
+      "notes": "Sheets append, HubSpot update and hot-lead notification all drain from the transactional outbox, so a provider outage retries instead of losing the result (PRD 18.2)."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": { "responseCode": 202 }
+      },
+      "id": "w03-respond",
+      "name": "Acknowledge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [700, 0]
+    }
+  ],
+  "connections": {
+    "Call Completed": { "main": [[{ "node": "Qualify", "type": "main", "index": 0 }]] },
+    "Qualify": { "main": [[{ "node": "Held for review?", "type": "main", "index": 0 }]] },
+    "Held for review?": {
+      "main": [
+        [{ "node": "Awaiting Human Review", "type": "main", "index": 0 }],
+        [{ "node": "Drain Sync Outbox", "type": "main", "index": 0 }]
+      ]
+    },
+    "Awaiting Human Review": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] },
+    "Drain Sync Outbox": { "main": [[{ "node": "Acknowledge", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "pinData": {}
+}
