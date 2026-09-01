@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: leadcalling
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+
+    env:
+      NODE_ENV: test
+      APP_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/leadcalling
+      DATABASE_URL_APP: postgresql://app_user:app_user_dev_pw@localhost:5432/leadcalling
+      DATABASE_URL_SERVICE: postgresql://app_service:app_service_dev_pw@localhost:5432/leadcalling
+      KMS_MASTER_KEY: dGVzdC1rbXMtbWFzdGVyLWtleS0zMi1ieXRlcy1sb25nISE=
+      KMS_MASTER_KEY_ID: ci-1
+      PII_ENCRYPTION_KEY: dGVzdC1waWktZW5jcnlwdGlvbi1rZXktMzJieXRlcyEhIQ==
+      PII_BLIND_INDEX_KEY: dGVzdC1ibGluZC1pbmRleC1rZXktMzItYnl0ZXMtbG9uZyE=
+      SESSION_SECRET: dGVzdC1zZXNzaW9uLXNlY3JldC0zMi1ieXRlcy1sb25nISEh
+      APP_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run db:migrate
+      - run: npm test
+      - run: npm run build
