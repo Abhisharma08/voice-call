@@ -70,9 +70,15 @@ export class GoogleSheetsClient {
 
   async appendRow(args: { spreadsheetId: string; range: string; row: SheetRow }): Promise<void> {
     const token = await this.accessToken();
+
+    // Re-quote rather than trusting the stored range: a tab name with a space
+    // saved as `Call Log!A:V` is unparseable to the API.
+    const { tab, cells } = splitRange(args.range);
+    const range = formatRange(tab, cells ?? "A:V");
+
     const url =
       `${SHEETS_BASE}/${encodeURIComponent(args.spreadsheetId)}/values/` +
-      `${encodeURIComponent(args.range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+      `${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
 
     let response: Response;
     try {
@@ -163,8 +169,14 @@ export class GoogleSheetsClient {
    */
   async ensureHeaderRow(spreadsheetId: string, range: string): Promise<"written" | "already_present"> {
     const token = await this.accessToken();
-    const tab = range.includes("!") ? range.split("!")[0] : range;
-    const headerRange = `${tab}!A1:${columnLetter(SHEET_COLUMNS.length)}1`;
+    const { tab } = splitRange(range);
+
+    // A brand-new spreadsheet has one tab called "Sheet1", so the configured
+    // tab usually does not exist yet. Create it rather than failing - that is
+    // what the operator wanted when they named it.
+    await this.ensureTab(spreadsheetId, tab);
+
+    const headerRange = `${quoteTab(tab)}!A1:${columnLetter(SHEET_COLUMNS.length)}1`;
 
     const existing = await this.fetchImpl(
       `${SHEETS_BASE}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(headerRange)}`,
@@ -198,6 +210,36 @@ export class GoogleSheetsClient {
     }
 
     return "written";
+  }
+
+  /** Add a tab if the spreadsheet does not already have one by that name. */
+  async ensureTab(spreadsheetId: string, tab: string): Promise<"created" | "already_present"> {
+    const existing = await this.verifyConnection(spreadsheetId);
+    if (existing.tabs.includes(tab)) return "already_present";
+
+    const token = await this.accessToken();
+    const response = await this.fetchImpl(
+      `${SHEETS_BASE}/${encodeURIComponent(spreadsheetId)}:batchUpdate`,
+      {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          requests: [{ addSheet: { properties: { title: tab } } }],
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new IntegrationError(
+        `Could not create the "${tab}" tab: ${detail.slice(0, 200)}. ` +
+          `Existing tabs: ${existing.tabs.join(", ")}`,
+        response.status === 429 || response.status >= 500,
+        response.status,
+      );
+    }
+
+    return "created";
   }
 
   /** Service-account JWT bearer flow (PRD 13.2 prefers a server-side service account). */
@@ -252,6 +294,44 @@ export class GoogleSheetsClient {
 
 function base64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
+}
+
+/**
+ * Split "Call Log!A:V" into its tab and cell parts. A range with no "!" is
+ * treated as a bare tab name.
+ */
+export function splitRange(range: string): { tab: string; cells: string | null } {
+  const bang = range.lastIndexOf("!");
+  if (bang === -1) return { tab: unquoteTab(range.trim()), cells: null };
+  return {
+    tab: unquoteTab(range.slice(0, bang).trim()),
+    cells: range.slice(bang + 1).trim() || null,
+  };
+}
+
+function unquoteTab(tab: string): string {
+  if (tab.length >= 2 && tab.startsWith("'") && tab.endsWith("'")) {
+    return tab.slice(1, -1).replace(/''/g, "'");
+  }
+  return tab;
+}
+
+/**
+ * A1 notation requires a sheet name to be single-quoted unless it is a plain
+ * identifier - so `Call Log!A1:V1` is rejected as unparseable while
+ * `'Call Log'!A1:V1` is fine. Internal quotes are doubled.
+ *
+ * Getting this wrong is invisible until the first sheet whose tab name has a
+ * space in it, which is most of them.
+ */
+export function quoteTab(tab: string): string {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(tab)
+    ? tab
+    : `'${tab.replace(/'/g, "''")}'`;
+}
+
+export function formatRange(tab: string, cells: string | null): string {
+  return cells ? `${quoteTab(tab)}!${cells}` : quoteTab(tab);
 }
 
 /** 1 -> A, 26 -> Z, 27 -> AA. */

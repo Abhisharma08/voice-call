@@ -346,10 +346,15 @@ describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", 
   });
 
   it("stops a queued lead once its consent is withdrawn (PRD 17.4)", async () => {
+    // A 24-hour window, so the assertion is about consent rather than about
+    // what time of day the suite happens to run.
     await asGlobal(() =>
       owner.query(
         `update campaigns set consent_basis = 'opt_in_form', consent_source = 'list',
-                compliance_approved_at = now(), active = true
+                compliance_approved_at = now(), active = true,
+                calling_config = jsonb_set(
+                  jsonb_set(calling_config, '{window_start}', '"00:00"'),
+                  '{window_end}', '"23:59"')
           where id = $1`,
         [CAMPAIGN_A],
       ),

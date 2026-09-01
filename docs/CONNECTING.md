@@ -145,8 +145,12 @@ downloaded JSON.
 - **Google Sheet ID** — from the URL: `docs.google.com/spreadsheets/d/<THIS>/edit`
 - **Sheet range** — `Call Log!A:V`
 
-Then press **Test connection** on the Sheets integration. It confirms access
-and writes the 22-column header row if the tab is empty.
+Then press **Test connection** on the Sheets integration. It confirms access,
+**creates the tab if it does not exist** (a new spreadsheet only has `Sheet1`),
+and writes the 22-column header row if that tab is empty.
+
+The test uses the range you configured above, not a hardcoded one - testing a
+destination the sync will not actually write to proves nothing.
 
 ---
 
@@ -280,6 +284,7 @@ PostgreSQL, it is outside the platform's access-control layer.
 | Every result says `unknown`, confidence 0 | No Anthropic credentials (step 1) |
 | HubSpot sync 400s | Custom properties missing — press *Test connection* |
 | Sheets sync 404s | Spreadsheet not shared with the service account |
+| `Unable to parse range: Call Log!A1:V1` | Was a bug in this platform, fixed. A tab name with a space must be quoted in A1 notation (`'Call Log'!A1:V1`); the client now quotes it, and creates the tab if it does not exist |
 | Integration flips to `error` and stops | PRD 18.2: auth failure disables rather than retrying. Fix the credential, press *Test connection* to re-enable |
 | Call results never arrive | `APP_URL` is stale or the tunnel died |
 | Campaign will not activate | Open items on the compliance checklist |
