@@ -88,9 +88,13 @@ beforeAll(async () => {
          (id, tenant_id, name, domain, business_context, script, timezone, active,
           voice_provider, calling_config, routing_config, scoring_rubric,
           compliance_approved_at, google_sheet_id, google_sheet_tab,
-          review_confidence_threshold, review_boundary_band)
+          review_confidence_threshold, review_boundary_band,
+          consent_basis, consent_source)
        values ($1, $2, 'Slice Campaign', 'residential_property', 'Test context', 'Hello', 'Asia/Kolkata', true,
-               'mock', $3::jsonb, $4::jsonb, '{}'::jsonb, now(), 'sheet-1', 'Call Log!A:V', 0.750, 5)
+               'mock', $3::jsonb, $4::jsonb, '{}'::jsonb, now(), 'sheet-1', 'Call Log!A:V', 0.750, 5,
+               -- Migration 0005 forbids a compliance approval without a
+               -- recorded consent basis for the list (PRD 14.3 step 10).
+               'opt_in_form', 'slice_test_list')
        on conflict (id) do nothing`,
       [
         CAMPAIGN,
@@ -254,13 +258,65 @@ describe("intake (FR-010 to FR-014)", () => {
     expect(reason).toMatch(/missing/);
   });
 
-  it("suppresses a lead with no consent record (PRD 26.1)", async () => {
+  it("suppresses a lead with no consent anywhere (PRD 26.1)", async () => {
+    // Phase 2 added a campaign-level consent declaration, and intake mints a
+    // per-lead consents row from it. So "no consent" now means neither the
+    // event nor the campaign carries a basis - which is what this clears.
+    // The approval has to go with it: migration 0005 forbids an approved
+    // campaign without a recorded consent basis, which is the whole point.
+    await asGlobal(() =>
+      owner.query(
+        `update campaigns set consent_basis = null, consent_source = null,
+                compliance_approved_at = null
+          where id = $1`,
+        [CAMPAIGN],
+      ),
+    );
+
+    try {
+      const outcome = await withScope(scope, (tx) =>
+        ingestLead(tx, leadEvent("+919876543210", { consent: null })),
+      );
+
+      expect(outcome.status).toBe("suppressed");
+
+      // checkEligibility reports the most serious reason, and an unapproved
+      // campaign outranks a missing consent. The claim under test is that
+      // nothing was minted on the lead's behalf.
+      const consents = await withScope(scope, async (tx) =>
+        (await tx.query(`select 1 from consents where lead_id = $1`, [outcome.leadId])).rowCount,
+      );
+      expect(consents).toBe(0);
+    } finally {
+      await asGlobal(() =>
+        owner.query(
+          `update campaigns set consent_basis = 'opt_in_form', consent_source = 'slice_test_list',
+                  compliance_approved_at = now()
+            where id = $1`,
+          [CAMPAIGN],
+        ),
+      );
+    }
+  });
+
+  it("queues a lead with no event consent when the campaign declares a basis", async () => {
+    // PRD 14.3 step 10: the Campaign Manager records the basis for the
+    // client's list once, and every lead from that list cites it.
     const outcome = await withScope(scope, (tx) =>
       ingestLead(tx, leadEvent("+919876543210", { consent: null })),
     );
 
-    expect(outcome.status).toBe("suppressed");
-    if (outcome.status === "suppressed") expect(outcome.reason).toBe("no_consent");
+    expect(outcome.status).toBe("queued");
+
+    const consent = await withScope(scope, async (tx) =>
+      (
+        await tx.query<{ captured_by: string }>(
+          `select captured_by from consents where lead_id = $1`,
+          [outcome.leadId],
+        )
+      ).rows[0],
+    );
+    expect(consent?.captured_by).toBe("campaign_declaration");
   });
 
   it("deduplicates a repeated event rather than creating a second lead (FR-013)", async () => {

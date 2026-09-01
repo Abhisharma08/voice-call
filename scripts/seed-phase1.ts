@@ -96,6 +96,12 @@ async function main() {
           hubspot_integration_id = $3,
           scoring_rubric = $4::jsonb,
           calling_config = $5::jsonb,
+          -- PRD 14.3 step 10: the basis on which this client's list may be
+          -- called. Migration 0005 makes it a precondition for approval.
+          consent_basis = 'opt_in_form',
+          consent_source = 'landing_page_form',
+          consent_evidence_ref = 'dev-fixture-no-real-evidence',
+          consent_declared_at = now(),
           -- Development fixture only. See the note at the top of this file.
           compliance_approved_at = now()
         where id = $1`,

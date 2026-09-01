@@ -49,8 +49,17 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
 
   const campaign = event.campaignId
     ? (
-        await tx.query<{ id: string; timezone: string; calling_config: { country?: string } }>(
-          `select id, timezone, calling_config from campaigns where id = $1`,
+        await tx.query<{
+          id: string;
+          timezone: string;
+          calling_config: { country?: string };
+          consent_basis: string | null;
+          consent_source: string | null;
+          consent_evidence_ref: string | null;
+        }>(
+          `select id, timezone, calling_config,
+                  consent_basis, consent_source, consent_evidence_ref
+             from campaigns where id = $1`,
           [event.campaignId],
         )
       ).rows[0] ?? null
@@ -80,8 +89,26 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
     ? await updateLead(tx, existing.id, event, { phone, phoneBidx, email, emailBidx })
     : await insertLead(tx, event, { phone, phoneBidx, email, emailBidx, defaultCountry });
 
-  if (event.consent) {
-    await recordConsent(tx, tenantId, leadId, event.consent);
+  // Consent supplied with the event wins; otherwise fall back to the basis the
+  // Campaign Manager recorded for this client's list (PRD 14.3 step 10).
+  //
+  // The fallback still writes a per-lead consents row rather than letting the
+  // campaign flag stand in for one, so every call cites a specific, dated
+  // record naming where the basis came from - which is the evidentiary trail
+  // PRD 26.1 asks for, not a blanket claim.
+  const consent =
+    event.consent ??
+    (campaign?.consent_basis
+      ? {
+          basis: campaign.consent_basis as NonNullable<IntakeEvent["consent"]>["basis"],
+          source: campaign.consent_source ?? "campaign_declaration",
+          evidenceRef: campaign.consent_evidence_ref ?? null,
+          capturedAt: null,
+        }
+      : null);
+
+  if (consent) {
+    await recordConsent(tx, tenantId, leadId, consent, event.consent ? "client_supplied" : "campaign_declaration");
   }
 
   // FR-012: no callable number means quarantine, with the reason recorded and
@@ -273,6 +300,7 @@ async function recordConsent(
   tenantId: string,
   leadId: string,
   consent: NonNullable<IntakeEvent["consent"]>,
+  capturedBy: "client_supplied" | "campaign_declaration",
 ): Promise<void> {
   // PRD 26.1: the agency needs its own evidentiary trail rather than an
   // unverified assumption inherited from the client at intake.
@@ -284,8 +312,16 @@ async function recordConsent(
 
   await tx.query(
     `insert into consents (tenant_id, lead_id, basis, source, evidence_ref, captured_at, captured_by)
-     values ($1, $2, $3, $4, $5, coalesce($6::timestamptz, now()), 'client_supplied')`,
-    [tenantId, leadId, consent.basis, consent.source, consent.evidenceRef ?? null, consent.capturedAt ?? null],
+     values ($1, $2, $3, $4, $5, coalesce($6::timestamptz, now()), $7)`,
+    [
+      tenantId,
+      leadId,
+      consent.basis,
+      consent.source,
+      consent.evidenceRef ?? null,
+      consent.capturedAt ?? null,
+      capturedBy,
+    ],
   );
 
   await auditInTx(tx, {
@@ -294,6 +330,11 @@ async function recordConsent(
     action: "consent.recorded",
     entityType: "lead",
     entityId: leadId,
-    metadata: { basis: consent.basis, source: consent.source, evidence_ref: consent.evidenceRef ?? null },
+    metadata: {
+      basis: consent.basis,
+      source: consent.source,
+      evidence_ref: consent.evidenceRef ?? null,
+      captured_by: capturedBy,
+    },
   });
 }
