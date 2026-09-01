@@ -21,7 +21,8 @@
     "test:unit": "vitest run tests/unit",
     "test:db": "vitest run tests/db",
     "test:watch": "vitest",
-    "db:seed:phase1": "tsx scripts/seed-phase1.ts"
+    "db:seed:phase1": "tsx scripts/seed-phase1.ts",
+    "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

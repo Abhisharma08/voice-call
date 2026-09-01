@@ -108,6 +108,98 @@ export class GoogleSheetsClient {
     );
   }
 
+  /**
+   * Confirm the service account can actually reach this spreadsheet.
+   *
+   * The usual failure is not a bad key but an unshared sheet: a service
+   * account is a separate principal, and a Drive file nobody shared with it is
+   * a 404 no matter how valid the credential is. Reporting that distinctly is
+   * the difference between a five-minute fix and an afternoon.
+   */
+  async verifyConnection(spreadsheetId: string): Promise<{ title: string; tabs: string[] }> {
+    const token = await this.accessToken();
+    const url =
+      `${SHEETS_BASE}/${encodeURIComponent(spreadsheetId)}` +
+      `?fields=properties.title,sheets.properties.title`;
+
+    const response = await this.fetchImpl(url, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    if (response.status === 404 || response.status === 403) {
+      throw new IntegrationError(
+        `Spreadsheet not reachable. Share it with the service account ` +
+          `(${this.credentials.client_email}) as an Editor.`,
+        false,
+        response.status,
+      );
+    }
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new IntegrationError(
+        `Sheets error ${response.status}: ${detail.slice(0, 200)}`,
+        response.status === 429 || response.status >= 500,
+        response.status,
+      );
+    }
+
+    const body = (await response.json()) as {
+      properties: { title: string };
+      sheets: Array<{ properties: { title: string } }>;
+    };
+
+    return {
+      title: body.properties.title,
+      tabs: body.sheets.map((sheet) => sheet.properties.title),
+    };
+  }
+
+  /**
+   * Write the PRD 15 column headers if the target range is empty.
+   *
+   * Appends are positional, so a sheet without headers produces 22 unlabelled
+   * columns that a human then has to decode. Idempotent - an existing first
+   * row is left alone rather than overwritten.
+   */
+  async ensureHeaderRow(spreadsheetId: string, range: string): Promise<"written" | "already_present"> {
+    const token = await this.accessToken();
+    const tab = range.includes("!") ? range.split("!")[0] : range;
+    const headerRange = `${tab}!A1:${columnLetter(SHEET_COLUMNS.length)}1`;
+
+    const existing = await this.fetchImpl(
+      `${SHEETS_BASE}/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(headerRange)}`,
+      { headers: { authorization: `Bearer ${token}` } },
+    );
+
+    if (existing.ok) {
+      const body = (await existing.json()) as { values?: string[][] };
+      if (body.values && body.values.length > 0 && (body.values[0]?.length ?? 0) > 0) {
+        return "already_present";
+      }
+    }
+
+    const write = await this.fetchImpl(
+      `${SHEETS_BASE}/${encodeURIComponent(spreadsheetId)}/values/` +
+        `${encodeURIComponent(headerRange)}?valueInputOption=RAW`,
+      {
+        method: "PUT",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ values: [[...SHEET_COLUMNS]] }),
+      },
+    );
+
+    if (!write.ok) {
+      const detail = await write.text().catch(() => "");
+      throw new IntegrationError(
+        `Could not write the header row: ${detail.slice(0, 200)}`,
+        write.status === 429 || write.status >= 500,
+        write.status,
+      );
+    }
+
+    return "written";
+  }
+
   /** Service-account JWT bearer flow (PRD 13.2 prefers a server-side service account). */
   private async accessToken(): Promise<string> {
     if (this.tokenCache && this.tokenCache.expiresAt > Date.now() + 60_000) {
@@ -160,4 +252,16 @@ export class GoogleSheetsClient {
 
 function base64url(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
+}
+
+/** 1 -> A, 26 -> Z, 27 -> AA. */
+function columnLetter(index: number): string {
+  let n = index;
+  let out = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    out = String.fromCharCode(65 + rem) + out;
+    n = Math.floor((n - 1) / 26);
+  }
+  return out;
 }

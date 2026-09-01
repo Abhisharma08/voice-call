@@ -102,6 +102,70 @@ export class HubSpotClient {
     });
   }
 
+  /**
+   * Cheap authenticated call, to tell a working token from a bad one before a
+   * campaign goes live rather than during its first sync.
+   */
+  async verifyConnection(): Promise<{ portalId: number; timeZone: string }> {
+    const info = (await this.request("/account-info/v3/details", "GET", undefined)) as {
+      portalId: number;
+      timeZone: string;
+    };
+    return { portalId: info.portalId, timeZone: info.timeZone };
+  }
+
+  /**
+   * Create the custom contact properties this platform writes (PRD 13.1
+   * "Custom properties: dnc, last_call, next_call, AI outcome").
+   *
+   * HubSpot rejects a PATCH naming a property that does not exist, so without
+   * this every CRM sync for a fresh portal fails with a 400 that reads like a
+   * bug in our code. Idempotent: an existing property is left alone.
+   */
+  async ensureProperties(): Promise<{ created: string[]; existing: string[] }> {
+    await this.ensurePropertyGroup();
+
+    const created: string[] = [];
+    const existing: string[] = [];
+
+    for (const property of AI_PROPERTIES) {
+      try {
+        await this.request("/crm/v3/properties/contacts", "POST", {
+          name: property.name,
+          label: property.label,
+          type: property.type,
+          fieldType: property.fieldType,
+          groupName: PROPERTY_GROUP,
+          description: property.description,
+          ...(property.options ? { options: property.options } : {}),
+        });
+        created.push(property.name);
+      } catch (err) {
+        // 409 means it is already there, which is success for our purposes.
+        if (err instanceof IntegrationError && err.status === 409) {
+          existing.push(property.name);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    return { created, existing };
+  }
+
+  private async ensurePropertyGroup(): Promise<void> {
+    try {
+      await this.request("/crm/v3/properties/contacts/groups", "POST", {
+        name: PROPERTY_GROUP,
+        label: "AI Lead Qualification",
+        displayOrder: -1,
+      });
+    } catch (err) {
+      if (err instanceof IntegrationError && err.status === 409) return;
+      throw err;
+    }
+  }
+
   private async request(path: string, method: string, body: unknown): Promise<unknown> {
     let response: Response;
     try {
@@ -111,7 +175,7 @@ export class HubSpotClient {
           authorization: `Bearer ${this.credentials.accessToken}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(body),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
     } catch (err) {
       // Network failures are transient by definition.
@@ -135,6 +199,10 @@ export class HubSpotClient {
     if (response.status === 404) {
       throw new IntegrationError(`HubSpot record not found: ${detail.slice(0, 200)}`, false, 404);
     }
+    if (response.status === 409) {
+      // Already exists. Callers that bootstrap properties treat this as success.
+      throw new IntegrationError(`HubSpot conflict: ${detail.slice(0, 200)}`, false, 409);
+    }
     if (response.status === 429 || response.status >= 500) {
       throw new IntegrationError(`HubSpot transient error ${response.status}`, true, response.status);
     }
@@ -146,3 +214,103 @@ export class HubSpotClient {
     );
   }
 }
+
+const PROPERTY_GROUP = "ai_lead_qualification";
+
+/**
+ * The contact properties written by `contactProperties()`. Names must match
+ * that function exactly - they are the wire contract with HubSpot.
+ */
+const AI_PROPERTIES: Array<{
+  name: string;
+  label: string;
+  type: string;
+  fieldType: string;
+  description: string;
+  options?: Array<{ label: string; value: string; displayOrder: number }>;
+}> = [
+  {
+    name: "ai_last_call_status",
+    label: "AI last call status",
+    type: "string",
+    fieldType: "text",
+    description: "Outcome of the most recent automated call attempt.",
+  },
+  {
+    name: "ai_last_call_at",
+    label: "AI last call at",
+    type: "datetime",
+    fieldType: "date",
+    description: "When the most recent automated call ended.",
+  },
+  {
+    name: "ai_intent",
+    label: "AI intent",
+    type: "string",
+    fieldType: "text",
+    description: "Intent classified from the call transcript.",
+  },
+  {
+    name: "ai_score",
+    label: "AI score",
+    type: "number",
+    fieldType: "number",
+    description: "Qualification score from the campaign rubric.",
+  },
+  {
+    name: "ai_qualification",
+    label: "AI qualification",
+    type: "string",
+    fieldType: "text",
+    description: "Qualified, partially qualified, or unqualified.",
+  },
+  {
+    name: "ai_call_summary",
+    label: "AI call summary",
+    type: "string",
+    fieldType: "textarea",
+    description: "Neutral summary of what the lead said.",
+  },
+  {
+    name: "ai_callback_requested",
+    label: "AI callback requested",
+    type: "bool",
+    fieldType: "booleancheckbox",
+    description: "The lead asked to be called back later.",
+    options: [
+      { label: "Yes", value: "true", displayOrder: 0 },
+      { label: "No", value: "false", displayOrder: 1 },
+    ],
+  },
+  {
+    name: "ai_next_call_at",
+    label: "AI next call at",
+    type: "datetime",
+    fieldType: "date",
+    description: "When the next attempt or callback is scheduled.",
+  },
+  {
+    name: "ai_human_followup",
+    label: "AI human follow-up requested",
+    type: "bool",
+    fieldType: "booleancheckbox",
+    description: "The lead asked to speak to a person.",
+    options: [
+      { label: "Yes", value: "true", displayOrder: 0 },
+      { label: "No", value: "false", displayOrder: 1 },
+    ],
+  },
+  {
+    name: "ai_do_not_call",
+    label: "AI do not call",
+    type: "bool",
+    fieldType: "booleancheckbox",
+    description: "The lead explicitly asked not to be contacted again.",
+    options: [
+      { label: "Yes", value: "true", displayOrder: 0 },
+      { label: "No", value: "false", displayOrder: 1 },
+    ],
+  },
+];
+
+export { AI_PROPERTIES, PROPERTY_GROUP };
