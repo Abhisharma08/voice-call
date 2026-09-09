@@ -3,19 +3,38 @@
 Control plane for the AI lead-qualification calling platform described in
 `docs/Multi_Tenant_AI_Lead_Calling_Platform_PRD_v1.2.pdf`.
 
-**Status: Phase 2 (configuration-driven multi-tenancy) complete.** A lead
-flows from a HubSpot-shaped event through intake, the calling queue, an AI
-call, LLM qualification and the human-review gate, out to Google Sheets,
-HubSpot and hot-lead routing - and every client-specific difference is now
-editable configuration rather than code. Production hardening is Phase 3.
+**Status: Phase 2 (configuration-driven multi-tenancy) complete, and
+deployable.** A lead flows from a HubSpot event through intake, the calling
+queue, an AI call, LLM qualification and the human-review gate, out to Google
+Sheets, HubSpot and hot-lead routing — and every client-specific difference is
+editable configuration rather than code. Onboarding a client, minting the token
+HubSpot posts with, and choosing the voice and analysis providers are all UI.
+Production hardening is Phase 3.
 
 ---
 
-## What Phase 0 delivers
+## Contents
+
+- [What each phase delivers](#what-each-phase-delivers)
+- [Try the whole flow](#try-the-whole-flow)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [HTTP surface](#http-surface)
+- [Architecture decisions](#architecture-decisions)
+- [Layout](#layout)
+- [Testing and CI](#testing-and-ci)
+- [Deploying](#deploying)
+- [Not built yet](#not-built-yet)
+
+---
+
+## What each phase delivers
+
+### Phase 0 — foundation
 
 PRD 22 defines Phase 0 as: repository, environments, CI/CD; PostgreSQL schema
 and migrations; auth/RBAC and tenant middleware; secrets management; base
-Next.js admin shell. All five are in place.
+Next.js admin shell.
 
 | Area | Implementation |
 | --- | --- |
@@ -28,42 +47,43 @@ Next.js admin shell. All five are in place.
 | PII | Column-level AES-256-GCM plus tenant-salted blind indexes |
 | Admin shell | Next.js App Router, PRD 14.1 navigation, tenant switcher, dashboard |
 
-## What Phase 1 adds
+### Phase 1 — the vertical slice
 
-PRD 22's Phase 1 is a single-client vertical slice: one HubSpot integration,
-one campaign, one voice provider adapter, the three n8n workflows, Sheets and
-HubSpot updates, and an end-to-end test lead.
+One HubSpot integration, one campaign, one voice provider adapter, the three
+n8n workflows, Sheets and HubSpot updates, and an end-to-end test lead.
 
 | Area | Implementation |
 | --- | --- |
-| Intake (FR-010 to FR-014) | `src/lib/leads/intake.ts` - E.164 normalisation, dedupe, quarantine, consent and DNC gate |
-| Queue (FR-020 to FR-025) | `src/lib/calling/queue.ts` - `FOR UPDATE SKIP LOCKED` claim, calling windows, concurrency caps, lock expiry |
-| Voice provider (PRD 10.4) | `src/lib/providers/voice/` - adapter interface plus a deterministic mock |
-| Qualification (FR-030 to FR-034) | `src/lib/qualification/` - Claude structured outputs, rubric scoring, routing |
+| Intake (FR-010 to FR-014) | `src/lib/leads/intake.ts` — E.164 normalisation, dedupe, quarantine, consent record and DNC gate |
+| Queue (FR-020 to FR-025) | `src/lib/calling/queue.ts` — `FOR UPDATE SKIP LOCKED` claim, calling windows, concurrency caps, lock expiry |
+| Voice provider (PRD 10.4) | `src/lib/providers/voice/` — adapter interface, mock, Sarvam, Twilio |
+| Qualification (FR-030 to FR-034) | `src/lib/qualification/` — structured outputs, rubric scoring, routing |
 | Review gate (FR-035, PRD 26.3) | `src/lib/qualification/review.ts` + `/review` queue UI |
-| Integrations (PRD 13) | `src/lib/integrations/` - HubSpot, Sheets, transactional outbox with backoff |
-| Workflows (PRD 9) | `n8n/W01`-`W04` JSON, importable |
+| Integrations (PRD 13) | `src/lib/integrations/` — HubSpot, Sheets, transactional outbox with backoff |
+| Workflows (PRD 9) | `n8n/W01`–`W04` JSON, importable (see `n8n/README.md` — the platform now schedules itself) |
 | Service identities | Per-tenant bearer tokens, scoped per workflow |
 
-## What Phase 2 adds
+### Phase 2 — configuration-driven multi-tenancy
 
-PRD 22's Phase 2 is tenant-scoped config, per-tenant credentials, multiple
-campaigns, per-campaign prompts/questions/scoring, tenant dashboards and audit
-logs.
+Tenant-scoped config, per-tenant credentials, multiple campaigns, per-campaign
+prompts/questions/scoring, tenant dashboards and audit logs.
 
 | Area | Implementation |
 | --- | --- |
-| Client onboarding (PRD 14.3) | `/clients` - create a tenant, add agency-managed credentials, track health |
-| Campaign configuration | `/campaigns/[id]` - script, questions, rubric, thresholds, windows, retries, destinations, model |
+| Client onboarding (PRD 14.3) | `/clients/new` — tenant, campaign, questions and service token in one transaction |
+| Client management | `/clients` — agency-managed credentials, health, activation status |
+| Campaign configuration | `/campaigns/[id]` — script, questions, rubric, thresholds, windows, retries, destinations, models, dial allowlist |
 | Config versioning (PRD 9) | Every save bumps `config_version` and snapshots into `campaign_versions` |
-| Compliance gate (PRD 17.3) | Consent declaration and a named attestation, both required before a campaign can dial |
-| Credentials (PRD 17.1) | `/integrations` - sealed on entry, validated for shape, never read back |
-| Staff & elevations (PRD 8.2) | `/settings` - assignments, time-boxed logged elevations |
-| KPIs (PRD 21) | `/analytics` - operational, AI-performance and commercial metrics kept apart |
-| Audit UI (PRD 17.1) | `/audit` - filterable, append-only |
-| Lead & call detail (PRD 14.4) | `/leads/[id]`, `/calls` - consent basis and config version per call |
+| Compliance gate (PRD 17.3) | Consent declaration and a named attestation, both required before a campaign can dial — enforced at claim time |
+| Credentials (PRD 17.1) | `/integrations` — sealed on entry, validated for shape, never read back |
+| Staff & elevations (PRD 8.2) | `/settings` — assignments, time-boxed logged elevations |
+| KPIs (PRD 21) | `/analytics` — operational, AI-performance and commercial metrics kept apart |
+| Audit UI (PRD 17.1) | `/audit` — filterable, append-only |
+| Lead & call detail (PRD 14.4) | `/leads/[id]`, `/calls` — consent basis and config version per call |
 
-### Try the whole flow
+---
+
+## Try the whole flow
 
 ```bash
 npm run db:reset          # migrate + seed + Phase 1 fixtures (prints a service token)
@@ -72,24 +92,47 @@ npm run dev
 TOKEN=svc_...             # from the seed output
 CAMPAIGN=...              # from the seed output
 
-# 1. ingest a lead (the mock provider picks its scenario from the last digit)
-curl -X POST localhost:3000/api/webhooks/leads \
+# Post a HubSpot-shaped contact. The call is placed on this request's own
+# invocation - there is nothing else to run.
+curl -X POST "localhost:3000/api/webhooks/hubspot/leads?campaign=$CAMPAIGN" \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"event_id":"evt-1","campaign_ref":"'$CAMPAIGN'","record_id":"hs-1",
-       "contact":{"name":"Rahul Sharma","phone":"98765 43210"},
-       "consent":{"basis":"opt_in_form","source":"landing_page_form","evidence_ref":"f-1"}}'
-
-# 2. dial, 3. post the provider callback, 4. qualify, 5. drain the outbox
-curl -X POST localhost:3000/api/internal/dial    -H "authorization: Bearer $TOKEN" \
-  -H 'content-type: application/json' -d '{"campaign_id":"'$CAMPAIGN'"}'
+  -d '[{"eventId":"evt-1","objectId":"hs-1","properties":{
+        "firstname":"Rahul","lastname":"Sharma","phone":"98765 43210",
+        "requirement":"2BHK in Noida Extension"}}]'
 ```
+
+The response returns as soon as intake commits; `/calls` has a `call_attempts`
+row moments later. `/api/webhooks/leads` takes this platform's own event shape
+and behaves the same way.
 
 Mock provider scenarios, selected by the last digit of the dialled number:
 `0` hot, `1` no answer, `2` busy, `3` not interested, `4` do-not-call,
-`5` callback requested, `9` transient provider failure.
+`5` callback requested, `9` transient provider failure. The mock places no
+calls, so nothing calls back on its own — `npm run demo` drives the provider
+callbacks, qualification and the outbox for a whole set of scenarios at once.
 
-**Connecting real services** (HubSpot, Google Sheets, n8n, a voice provider):
-see [`docs/CONNECTING.md`](docs/CONNECTING.md).
+`npm run worker` runs the scheduled sweep locally (retries, callbacks, a
+calling window opening, the outbox). It is not needed to see a new lead dial.
+
+### Two HubSpot intake paths
+
+Tier decides which is available:
+
+| Client's HubSpot | Path | Endpoint |
+| --- | --- | --- |
+| **Free** (no workflows) | Private app subscription, signature-verified | `/api/webhooks/hubspot/events` |
+| Professional and above | Workflow *Send a webhook* action | `/api/webhooks/hubspot/leads?campaign=…` |
+
+The free-tier path is the one most clients use. It authenticates with
+`X-HubSpot-Signature-v3` rather than a bearer token, resolves the client from
+the payload's `portalId`, and fetches the contact's properties over the CRM API
+— a subscription event carries only an object id. Which campaign a lead lands
+in is routed from a contact property, since one private app has a single
+webhook URL for the whole portal.
+
+**Connecting real services** (HubSpot, Google Sheets, a voice provider): see
+[`docs/CONNECTING.md`](docs/CONNECTING.md). **Deploying it:**
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
 
@@ -103,6 +146,9 @@ cp .env.example .env.local
 
 # generate the four key values in .env.local
 node -e 'const c=require("crypto");for(const k of ["KMS_MASTER_KEY","PII_ENCRYPTION_KEY","PII_BLIND_INDEX_KEY","SESSION_SECRET"])console.log(k+"="+c.randomBytes(32).toString("base64"))'
+
+# and the scheduler's shared secret
+node -e 'console.log("CRON_SECRET="+require("crypto").randomBytes(32).toString("base64url"))'
 
 npm run db:up        # PostgreSQL 17 on localhost:5434
 npm run db:migrate
@@ -131,10 +177,62 @@ both.
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Vitest (unit + database) |
 | `npm run test:unit` | Unit tests only, no database needed |
+| `npm run test:db` | Database tests, against the container |
 | `npm run db:up` / `db:down` | PostgreSQL container |
 | `npm run db:migrate` / `db:seed` | Schema and base fixtures |
-| `npm run db:seed:phase1` | Dialable campaign, credentials, n8n service token |
+| `npm run db:seed:phase1` | Dialable campaign, credentials, service token |
+| `npm run db:seed:aluempire` | A real-shaped single-client fixture |
 | `npm run db:reset` | All of the above from scratch |
+| `npm run worker` | The scheduled sweep, locally — calls `/api/cron/tick` on a timer |
+| `npm run demo` | Drives a set of scenarios end to end against the mock provider |
+| `npm run tunnel` | A public URL for inbound webhooks, and rewrites `APP_URL` |
+
+---
+
+## Configuration
+
+`.env.example` is the authoritative list, with the reasoning for each value
+next to it. The shape of it:
+
+| Group | Values | Required? |
+| --- | --- | --- |
+| Database | `DATABASE_URL` (owner, migrations only), `DATABASE_URL_APP` (staff requests), `DATABASE_URL_SERVICE` (webhooks and workers), `DB_POOL_MAX` | Yes — three roles, not one |
+| Secrets | `KMS_MASTER_KEY`, `KMS_MASTER_KEY_ID`, `KMS_PREVIOUS_KEYS` | Yes |
+| PII | `PII_ENCRYPTION_KEY`, `PII_BLIND_INDEX_KEY` | Yes, and must differ from the master key |
+| Sessions | `SESSION_SECRET`, `SESSION_TTL_HOURS` | Yes |
+| Qualification | `ANTHROPIC_API_KEY` (+ `ANTHROPIC_WORKSPACE_ID` for identity-linked keys), `GEMINI_API_KEY` | Optional — absence degrades to the review queue |
+| Voice | `VOICE_WEBHOOK_SECRET`; `TWILIO_*`; `SARVAM_*` | Only for the provider you select |
+| Scheduling | `CRON_SECRET` | Yes outside development |
+| App | `APP_URL` | Yes, and stable — callback URLs are minted from it |
+
+Two registries decide what a campaign can actually use, and both work the same
+way: an adapter registers only when its environment is complete, so selecting
+an unconfigured provider fails legibly instead of half-working.
+
+- **Voice** (`src/lib/providers/voice/`): `mock` is always registered and
+  places no calls; `sarvam` and `twilio` register when their variables are set.
+  Selected per campaign by `campaigns.voice_provider`.
+- **Analysis** (`src/lib/qualification/providers/`): resolved from the model id
+  in `campaigns.analysis_model` — a `claude-*` id goes to Anthropic, a
+  `gemini-*` id to Google. Anthropic is always registered (its absence is the
+  documented degraded mode); Gemini registers only with a key.
+
+---
+
+## HTTP surface
+
+| Route | Auth | Purpose |
+| --- | --- | --- |
+| `POST /api/webhooks/hubspot/events` | `X-HubSpot-Signature-v3` | Free-tier private-app subscription; resolves the tenant from `portalId` |
+| `POST /api/webhooks/hubspot/leads?campaign=…` | Service token | HubSpot workflow *Send a webhook* |
+| `POST /api/webhooks/leads` | Service token | This platform's own event shape |
+| `POST /api/webhooks/voice/[provider]` | Per-provider signature or token | Call results, transcripts, status |
+| `POST /api/webhooks/voice/twilio/twiml` | Twilio signature | The conversation Twilio speaks |
+| `GET/POST /api/cron/tick` | `CRON_SECRET` bearer | The scheduled sweep — retries, callbacks, windows, outbox |
+| `/api/internal/dial`, `/analyze`, `/sync` | Service token | Stage endpoints, idempotent on their own keys |
+| `/api/auth/login`, `/logout`, `/api/tenant` | Session cookie | Admin shell |
+| `/api/leads/reveal`, `/api/review/resolve` | Session cookie + permission | Audited actions |
+| `GET /api/health` | None | Liveness |
 
 ---
 
@@ -151,8 +249,8 @@ clauses:
 
 - Every tenant-scoped table has `ENABLE` **and** `FORCE ROW LEVEL SECURITY`
   with the same policy: `app.tenant_visible(tenant_id)`.
-- The application connects as `app_user` or `app_service` - never as the table
-  owner - so the policies actually apply. `FORCE` closes the owner loophole
+- The application connects as `app_user` or `app_service` — never as the table
+  owner — so the policies actually apply. `FORCE` closes the owner loophole
   too, which is why the seed script has to declare global scope like any other
   actor.
 - Tenant scope is carried in transaction-local settings (`set_config(..., true)`)
@@ -178,7 +276,7 @@ A denied tenant returns the same 404 and the same message as a tenant that does
 not exist (PRD 23.3).
 
 `src/middleware.ts` only checks that a session cookie is present. It runs on
-the edge with no database access, so it cannot validate anything - it is a
+the edge with no database access, so it cannot validate anything — it is a
 redirect convenience, not a security boundary.
 
 ### Staff are scoped by assignment, not by employment
@@ -186,7 +284,7 @@ redirect convenience, not a security boundary.
 PRD 8.2 is explicit that agency staff should not reach every client by default
 just because "the agency has access to everything". `users` therefore carries no
 meaningful tenant of its own; scope comes from `user_tenant_assignments`, and
-anything outside that set requires a row in `access_elevations` - time-boxed,
+anything outside that set requires a row in `access_elevations` — time-boxed,
 attributed and revocable.
 
 This is a deliberate deviation from the literal `users.tenant_id` in PRD 12:
@@ -221,13 +319,15 @@ are ciphertext before they reach PostgreSQL.
 
 Encrypted columns cannot be searched, but PRD 12 needs `(tenant_id, phone)`
 lookups for deduplication (FR-013) and PRD 17.4 needs DNC lookups. Each lead
-therefore stores a **blind index** - a keyed HMAC of the normalised value -
+therefore stores a **blind index** — a keyed HMAC of the normalised value —
 alongside the ciphertext. It is tenant-salted, so the same phone number
 produces a different index per client and one tenant's index cannot probe
 another's rows.
 
 `phone_last4` is stored separately for list views; the full number requires an
-explicit reveal, which is an audited action.
+explicit reveal, which is an audited action. The lead's own enquiry text
+(migration 0009) is encrypted the same way: it is free text a member of the
+public typed into a form, so it can easily contain an address or a name.
 
 ### The audit log is append-only
 
@@ -237,38 +337,130 @@ Prefer `auditInTx()` over `recordAudit()`: writing the audit row inside the
 transaction it describes means the log cannot claim something that was rolled
 back.
 
+### Consent is recorded, never demanded again
+
+Consent is collected at the landing page or lead form before the lead ever
+reaches HubSpot. Requiring a second, manual consent step here was friction that
+recorded nothing the funnel had not already established, and it suppressed real
+leads as `no_consent` for a permission that had in fact been given.
+
+So migrations 0006 and 0008 dropped the *gate* and kept the *record*: intake
+writes a `consents` row for every lead, derived from where the lead came from,
+so a call can cite the specific basis it was placed under (PRD 26.1). The row
+is honest about its provenance — `captured_by = 'inherited_upstream'` says the
+agency did not run the opt-in funnel and has not independently verified it.
+
+What still stops a call is a **withdrawal**: an explicit opt-out or a DNC
+request after the form. That is a different permission from the one the form
+collected, and it is untouched.
+
+### A lead dials itself; the scheduler is a safety net
+
+PRD G2 targets p95 under 30 seconds from CRM ingestion to dial. The queue could
+always deliver that — `next_call_at` is `now()` the moment intake commits — but
+nothing asked it to. Something had to tick, and the only thing that did was a
+scheduler running once a minute, which spends most of that budget waiting.
+
+So the webhook that receives a lead places the call, after its own response:
+`after()` in the route, `waitUntil` underneath. HubSpot is acknowledged in
+milliseconds and never waits on a carrier.
+
+What makes that safe is that it is an optimisation, not a mechanism. The lead
+is durably `queued` before the response goes out, and everything that makes
+calling correct is a row rather than a timer: the claim is `FOR UPDATE SKIP
+LOCKED` with a lock expiry, retries and backoff are columns, the endpoints are
+idempotent on their own keys. If the post-response work never runs — a dropped
+invocation, a platform that does not support it — the next sweep places the
+same call. Nothing in the pipeline has the dial trigger as its only path.
+
+`/api/cron/tick` is that sweep, and it is what a serverless deployment can
+actually run. It covers what no single request can notice: a retry coming due
+hours later, a calling window opening, a requested callback, a lead stranded by
+an invocation that died mid-call, and the sync outbox clearing after a HubSpot
+or Sheets outage. One endpoint for every tenant and every campaign — an idle
+client costs nothing, because the pass enumerates outstanding work rather than
+looping over clients.
+
+It authenticates with a shared secret rather than a service token, which is the
+one privilege boundary it widens: service tokens are per tenant by design (PRD
+8.2) and this crosses all of them. So it reads only enough to enumerate work,
+then does the work inside per-tenant scopes, and refuses to serve at all when
+`CRON_SECRET` is unset rather than defaulting to open.
+
+`scripts/worker.ts` calls that same endpoint on a timer, so what runs locally is
+what runs deployed. On Vercel, `vercel.json` schedules it every minute.
+
+### A trial provider account cannot dial a real lead list
+
+Every voice provider's free trial restricts outbound calls to numbers verified
+on the account. Pointed at a real lead list, a trial account fails on every
+number that is not the tester's own phone — burning an attempt from each lead's
+retry budget and filling the queue with opaque provider errors. Worse, a
+half-configured staging environment can attempt real people.
+
+Migration 0007 mirrors that constraint inside the platform. When a campaign's
+dial allowlist is non-empty, only those numbers may be dialled and everything
+else is suppressed with a legible reason, *before* a call is placed. Empty
+means no restriction, which is the production case.
+
+### Onboarding a client is one transaction, not four screens and a script
+
+Adding a client used to mean creating a tenant in the UI, creating a campaign,
+writing a script and questions by hand, and then running a `scripts/seed-*.ts`
+file to mint the service token — because minting one had no UI at all. That is
+how client configuration ended up in the repository twice.
+
+`/clients/new` does all of it in one transaction: tenant, assignment, campaign
+from a vertical template (`windows_doors`, `real_estate`, `generic`),
+qualification questions, and the token HubSpot posts with. A half-onboarded
+client is worse than none — a tenant with no campaign is invisible in most of
+the UI, and a campaign whose token was never minted looks configured while
+HubSpot has no way to reach it.
+
+What onboarding deliberately cannot do is make the campaign dial. It starts
+inactive, on the `mock` provider, and returns `activationBlockers()` for the
+operator to work through. Compliance approval in particular is a named person's
+attestation (PRD 17.3); a template cannot make a statement about a telecom
+review.
+
 ---
 
 ## Layout
 
 ```
 db/migrations/          Authoritative SQL. Forward-only, checksummed.
-  0000_roles_and_helpers.sql   Roles, RLS helper functions
-  0001_core_schema.sql         PRD 12 data model + 26.1/26.2/26.3
-  0002_rls_policies.sql        Policies and least-privilege grants
-  0003_auth_lookups.sql        SECURITY DEFINER auth entry points
-  0004_phase1_calling.sql      Service tokens, webhook idempotency, queue locks
-  0005_phase2_configuration.sql Config provenance, consent declaration, versions
-scripts/                migrate / seed / reset
+  0000_roles_and_helpers.sql         Roles, RLS helper functions
+  0001_core_schema.sql               PRD 12 data model + 26.1/26.2/26.3
+  0002_rls_policies.sql              Policies and least-privilege grants
+  0003_auth_lookups.sql              SECURITY DEFINER auth entry points
+  0004_phase1_calling.sql            Service tokens, webhook idempotency, queue locks
+  0005_phase2_configuration.sql      Config provenance, consent declaration, versions
+  0006_consent_inheritance.sql       Consent recorded from the source, not re-asked
+  0007_dial_allowlist.sql            Trial-account and staging dial restriction
+  0008_consent_recorded_not_required.sql  The consent gate removed entirely
+  0009_lead_enquiry.sql              What the lead actually asked for, encrypted
+  0010_hubspot_free_tier_intake.sql  Private-app subscriptions, portal resolution
+scripts/                migrate / seed / reset / worker / tunnel / demo
 src/db/                 Pools, scoped transactions, typed schema mirror
 src/lib/crypto/         KMS envelope encryption, PII, password hashing
 src/lib/auth/           Sessions, RBAC, tenant middleware, service tokens
-src/lib/leads/          Intake, eligibility, consent and DNC gates
-src/lib/calling/        Queue, calling windows, retry ladder, worker, results
-src/lib/qualification/  Schema, analysis, scoring, review gate, resolution
-src/lib/providers/      Voice provider adapter and the mock implementation
-src/lib/integrations/   HubSpot, Google Sheets, transactional outbox
+src/lib/leads/          Intake, eligibility, DNC gate, HubSpot event and campaign routing
+src/lib/calling/        Queue, windows, retry ladder, worker, results, post-response dispatch
+src/lib/qualification/  Schema, analysis, provider registry, scoring, review gate, resolution
+src/lib/providers/      Voice adapter interface: mock, Sarvam, Twilio
+src/lib/integrations/   HubSpot (+ signature verification), Google Sheets, transactional outbox
 src/lib/campaigns/      Campaign configuration schema, versioning, activation checks
+src/lib/onboarding/     Vertical templates and the one-transaction client setup
 src/lib/actions.ts      Permission + tenant scope + audit wrapper for every write
-n8n/                    W01-W04 workflow definitions
 src/lib/audit.ts        Append-only audit trail
-src/app/                Next.js App Router; (admin) is the shell
+src/app/                Next.js App Router; (admin) is the shell, api/ the HTTP surface
+n8n/                    W01-W04 workflow definitions (not in use; see n8n/README.md)
 tests/unit/             No database required
-tests/db/               Isolation and auth, against a real PostgreSQL
+tests/db/               Isolation, auth, configuration and vertical slice, against real PostgreSQL
 ```
 
 `db/migrations` is authoritative. `src/db/schema.ts` is a hand-maintained typed
-mirror for query building - RLS policies, partial indexes and check constraints
+mirror for query building — RLS policies, partial indexes and check constraints
 have no faithful representation in it, so **do not generate DDL from it.**
 
 Migrations are checksummed once applied; editing an applied file fails the next
@@ -276,11 +468,53 @@ run. Write a new migration instead.
 
 ---
 
+## Testing and CI
+
+```bash
+npm run test:unit    # crypto, RBAC, phone, scoring, signatures, providers, onboarding
+npm run db:up && npm run db:migrate
+npm run test:db      # tenant isolation, auth, configuration, HubSpot intake, vertical slice
+```
+
+The database tests are the ones that matter for the isolation claims above:
+they assert that a scope-less connection sees nothing, that one tenant's blind
+index cannot probe another's rows, and that a denied tenant is indistinguishable
+from a missing one. `.github/workflows/ci.yml` runs typecheck, migrations, the
+whole suite and a production build against a real PostgreSQL service.
+
+---
+
+## Deploying
+
+[`docs/DEPLOY.md`](docs/DEPLOY.md) walks the whole path on Vercel with managed
+PostgreSQL (Neon or Supabase). The order matters: the database has to exist
+before the app can boot, and `APP_URL` has to be final before a single call is
+placed, because callback URLs are minted from it and Twilio's signature check
+compares against it.
+
+Three things are easy to get wrong and worth repeating here:
+
+- **Three database roles, not one.** RLS is only enforced against a non-owner
+  role, so an app connecting as the owner has no tenant isolation at all.
+- **Pooled connection strings.** Serverless multiplies pools — every warm
+  instance holds its own — so point `DATABASE_URL_*` at the pooler host and
+  keep `DB_POOL_MAX` small.
+- **`CRON_SECRET` must be set.** `/api/cron/tick` returns 503 rather than
+  running open without it, and on a serverless platform nothing else dials a
+  lead whose retry fell due.
+
+---
+
 ## Not built yet
 
-- **Real voice provider.** Only the `mock` adapter is registered. A carrier
-  adapter implements `VoiceProvider` and registers itself; the calling worker
-  does not change. Provider choice is a compliance decision (PRD 17.3).
+- **A voice provider proven in production.** Three adapters are registered:
+  `mock` (always available, places no calls), plus `sarvam` and `twilio`, which
+  register only when their environment variables are set — so selecting an
+  unconfigured provider fails loudly at claim time rather than dialling through
+  something half-set-up. Twilio is telephony only, driving TwiML this app
+  serves, and is there for local testing against a phone that actually rings.
+  Neither has been run against a production account or volume, and provider
+  choice is a compliance decision (PRD 17.3).
 - **Notification transport** (PRD 16). The routing event, the hot-lead payload
   and the masked phone number are produced; the email/Slack delivery is not.
 - **Production hardening** (Phase 3): load testing, alerting on the PRD 18.3
@@ -290,14 +524,15 @@ run. Write a new migration instead.
 Navigation entries for the unbuilt surfaces render a placeholder naming the
 phase that fills them.
 
-### Compliance gate
+### The compliance gate is live
 
-`campaigns.compliance_approved_at` exists and is null for every seeded
-campaign. PRD 17.3 requires that India outbound campaigns not activate until a
+PRD 17.3 requires that India outbound campaigns not activate until a
 telecom/compliance review confirms the agency's own sender/telemarketer
 registration, the consent basis for the client's list, provider arrangement,
 DNC handling, recording notices and retention.
 
-The column is in place; **the enforcement that reads it belongs with the
-calling worker in Phase 1**, since Phase 0 places no calls. Do not enable
-outbound calling before that check exists and the review has actually happened.
+`campaigns.compliance_approved_at` is null for every seeded campaign, and
+`src/lib/calling/queue.ts` refuses to claim a lead for a campaign that is
+inactive or unapproved — so the column is enforcement, not documentation. The
+attestation is recorded through `/campaigns/[id]` by a named person;
+`activationBlockers()` lists what a campaign is still missing.
