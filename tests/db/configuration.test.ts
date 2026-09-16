@@ -90,8 +90,7 @@ beforeEach(async () => {
     await owner.query(
       `update campaigns set compliance_approved_at = null, compliance_approved_by = null,
               consent_basis = null, consent_source = null, active = false,
-              consent_mode = 'require_record', consent_origin = null,
-              dial_allowlist = '{}'
+              consent_origin = null, dial_allowlist = '{}'
         where tenant_id = $1`,
       [TENANT],
     );
@@ -306,40 +305,24 @@ describe("compliance gate (PRD 17.3, 14.3 step 10)", () => {
     expect(r?.compliance_approved_at).not.toBeNull();
   });
 
-  it("does not block an inherit_from_source campaign on a consent basis", () => {
+  it("never blocks a campaign on a missing consent basis", () => {
     const blockers = activationBlockers({
       complianceApprovedAt: null,
-      consentBasis: null,
-      consentMode: "inherit_from_source",
       script: "",
       questions: 0,
       googleSheetId: null,
       hubspotIntegrationId: null,
     });
+    // Compliance sign-off, script, questions, sheet, HubSpot - and nothing
+    // about consent, which the funnel collects upstream (migration 0008).
     expect(blockers).toHaveLength(5);
     expect(blockers.join(" ")).not.toMatch(/consent/i);
-  });
-
-  it("still blocks a require_record campaign on a missing consent basis", () => {
-    const blockers = activationBlockers({
-      complianceApprovedAt: null,
-      consentBasis: null,
-      consentMode: "require_record",
-      script: "",
-      questions: 0,
-      googleSheetId: null,
-      hubspotIntegrationId: null,
-    });
-    expect(blockers).toHaveLength(6);
-    expect(blockers[0]).toMatch(/consent record/i);
   });
 
   it("reports no blockers for a fully configured campaign", () => {
     expect(
       activationBlockers({
         complianceApprovedAt: new Date(),
-        consentBasis: "opt_in_form",
-        consentMode: "require_record",
         script: "Hello",
         questions: 2,
         googleSheetId: "sheet-1",
@@ -360,30 +343,36 @@ describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", 
     correlationId: null,
   });
 
-  it("writes no consent record on a require_record campaign with no basis", async () => {
+  it("records consent even for a lead suppressed for another reason", async () => {
     await asGlobal(() =>
-      owner.query(`update campaigns set consent_mode = 'require_record' where id = $1`, [CAMPAIGN_A]),
+      owner.query(`update campaigns set active = false, consent_basis = null where id = $1`, [
+        CAMPAIGN_A,
+      ]),
     );
 
     const outcome = await withScope(scope, (tx) => ingestLead(tx, event(CAMPAIGN_A)));
 
-    // Which gate reports first depends on the campaign's state - an inactive
-    // or unapproved campaign is a more serious reason than a missing consent,
-    // and checkEligibility returns the most serious one. What matters here is
-    // that nothing was invented on the lead's behalf.
+    // An inactive campaign still stops the call...
     expect(outcome.status).toBe("suppressed");
 
-    const consents = await withScope(scope, async (tx) =>
-      (await tx.query(`select 1 from consents where lead_id = $1`, [outcome.leadId])).rowCount,
+    // ...but the consent the funnel collected is recorded regardless, so the
+    // lead is dialable the moment the campaign is switched on, with no second
+    // pass needed to backfill a row (migration 0008).
+    const consent = await withScope(scope, async (tx) =>
+      (
+        await tx.query<{ captured_by: string }>(
+          `select captured_by from consents where lead_id = $1`,
+          [outcome.leadId],
+        )
+      ).rows[0],
     );
-    expect(consents).toBe(0);
+    expect(consent?.captured_by).toBe("inherited_upstream");
   });
 
-  it("inherits consent from the lead source when the campaign says to", async () => {
+  it("inherits consent from the lead source", async () => {
     await asGlobal(() =>
       owner.query(
-        `update campaigns set consent_mode = 'inherit_from_source',
-                consent_origin = 'meta_lead_form',
+        `update campaigns set consent_origin = 'meta_lead_form',
                 compliance_approved_at = now(), active = true,
                 calling_config = jsonb_set(
                   jsonb_set(calling_config, '{window_start}', '"00:00"'),
@@ -413,11 +402,10 @@ describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", 
     expect(consent?.evidence_ref).toContain("hubspot:");
   });
 
-  it("still stops a lead whose consent was withdrawn, even under inherit", async () => {
+  it("still stops a lead whose consent was withdrawn", async () => {
     await asGlobal(() =>
       owner.query(
-        `update campaigns set consent_mode = 'inherit_from_source',
-                compliance_approved_at = now(), active = true,
+        `update campaigns set compliance_approved_at = now(), active = true,
                 calling_config = jsonb_set(
                   jsonb_set(calling_config, '{window_start}', '"00:00"'),
                   '{window_end}', '"23:59"')
@@ -560,8 +548,7 @@ describe("dial allowlist (trial provider accounts)", () => {
   async function readyWithAllowlist(numbers: string[]) {
     await asGlobal(() =>
       owner.query(
-        `update campaigns set consent_mode = 'inherit_from_source',
-                compliance_approved_at = now(), active = true,
+        `update campaigns set compliance_approved_at = now(), active = true,
                 dial_allowlist = $2,
                 calling_config = jsonb_set(
                   jsonb_set(calling_config, '{window_start}', '"00:00"'),

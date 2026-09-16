@@ -4,6 +4,7 @@ import { currentUser } from "@/lib/auth/current-user";
 import { withTenant, TenantAccessError } from "@/lib/auth/tenant";
 import { can } from "@/lib/auth/rbac";
 import { resolveReview } from "@/lib/qualification/resolve";
+import { logger } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
 
@@ -56,7 +57,9 @@ export async function POST(request: NextRequest) {
     if (message.includes("validation")) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
-    console.error(JSON.stringify({ level: "error", msg: "review resolve failed", err: message }));
+    logger.error("review resolve failed", {
+      err: message,
+    });
     return NextResponse.json({ error: "Resolve failed" }, { status: 500 });
   }
 }

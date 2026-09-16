@@ -1,9 +1,20 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { z } from "zod";
 import { authenticateService, withServiceScope } from "@/lib/auth/service";
 import { ingestLead } from "@/lib/leads/intake";
+import { dispatchDial } from "@/lib/calling/dispatch";
+import {
+  RateLimits,
+  clientAddress,
+  consumeRateLimit,
+  retryAfterHeaders,
+} from "@/lib/ratelimit";
+import { logger } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
+
+/** The response returns on commit; the call is placed after it. See dispatch.ts. */
+export const maxDuration = 60;
 
 /**
  * Lead intake ingress (FR-010, workflow W01).
@@ -23,6 +34,10 @@ const Body = z.object({
     name: z.string().nullable().optional(),
     phone: z.string().nullable().optional(),
     email: z.string().nullable().optional(),
+    // What the lead typed into the form. Capped rather than unbounded: it is
+    // spoken back to them, and a form field pasted full of prose is a bug
+    // upstream, not something to read down a phone line.
+    requirement: z.string().max(2000).nullable().optional(),
   }),
   consent: z
     .object({
@@ -37,6 +52,22 @@ const Body = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  /**
+   * Ahead of the token lookup, so an unauthenticated flood cannot spend a
+   * database round trip and a hash comparison per request. Keyed by source
+   * address, which is all that is known before the token is verified.
+   */
+  const limit = await consumeRateLimit(
+    RateLimits.leadWebhook,
+    clientAddress(request.headers),
+  );
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: retryAfterHeaders(limit) },
+    );
+  }
+
   const identity = await authenticateService(request, "leads:ingest");
   if (!identity) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -105,16 +136,24 @@ export async function POST(request: NextRequest) {
       return { replay: false, result };
     });
 
+    // Dial immediately rather than waiting for the scheduled sweep (G2). A
+    // replay dials nothing: the lead it names is already in flight.
+    if (!outcome.replay && (outcome.result as { status?: string } | null)?.status === "queued") {
+      after(() =>
+        dispatchDial({
+          tenantId: identity.tenantId,
+          campaignIds: [event.campaign_ref],
+          workerId: "intake-api",
+        }),
+      );
+    }
+
     return NextResponse.json(outcome, { status: outcome.replay ? 200 : 202 });
   } catch (err) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        msg: "lead intake failed",
-        tenant_id: identity.tenantId,
-        err: err instanceof Error ? err.message : String(err),
-      }),
-    );
+    logger.error("lead intake failed", {
+      tenant_id: identity.tenantId,
+      err: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json({ error: "Intake failed" }, { status: 500 });
   }
 }

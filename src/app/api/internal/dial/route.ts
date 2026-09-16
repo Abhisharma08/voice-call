@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authenticateService, withServiceScope } from "@/lib/auth/service";
 import { runCallingTick } from "@/lib/calling/worker";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
 
@@ -42,7 +43,9 @@ export async function POST(request: NextRequest) {
     if (message.includes("Campaign not found")) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    console.error(JSON.stringify({ level: "error", msg: "dial tick failed", err: message }));
+    logger.error("dial tick failed", {
+      err: message,
+    });
     return NextResponse.json({ error: "Dial tick failed" }, { status: 500 });
   }
 }

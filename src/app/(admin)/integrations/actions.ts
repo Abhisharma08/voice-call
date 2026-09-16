@@ -6,6 +6,7 @@ import { failure, success, tenantAction, type ActionResult } from "@/lib/actions
 import type { SealedSecret } from "@/lib/crypto/kms";
 import { HubSpotClient, IntegrationError } from "@/lib/integrations/hubspot";
 import { GoogleSheetsClient, splitRange } from "@/lib/integrations/google-sheets";
+import { SlackNotifier } from "@/lib/integrations/slack";
 
 /**
  * Verify a stored credential, and bootstrap whatever the far end needs.
@@ -35,6 +36,15 @@ export interface ConnectionReport {
   ok: boolean;
   summary: string;
   details: string[];
+  /**
+   * HubSpot's own account id, learned from the test rather than typed in.
+   *
+   * It is how an inbound private-app webhook finds this client: the payload
+   * carries `portalId` and nothing else identifying, so without this mapping a
+   * free-tier portal has no way to deliver a lead. Capturing it here means one
+   * fewer field to copy by hand, and one fewer to copy wrongly.
+   */
+  portalId?: number;
 }
 
 export async function testIntegration(formData: FormData): Promise<ActionResult<ConnectionReport>> {
@@ -81,7 +91,9 @@ export async function testIntegration(formData: FormData): Promise<ActionResult<
           ? await testHubSpot(sealed)
           : record.type === "google_sheets"
             ? await testSheets(sealed, spreadsheetId, sheetRange)
-            : { ok: false, summary: `No connection test for ${record.type} yet`, details: [] };
+            : record.type === "notification"
+              ? await testSlack(sealed)
+              : { ok: false, summary: `No connection test for ${record.type} yet`, details: [] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
@@ -104,9 +116,10 @@ export async function testIntegration(formData: FormData): Promise<ActionResult<
     // disabled by PRD 18.2's auth-failure rule gets back into service.
     if (report.ok) {
       await ctx.tx.query(
-        `update integrations set status = 'active', last_error = null, last_verified_at = now()
+        `update integrations set status = 'active', last_error = null, last_verified_at = now(),
+                hubspot_portal_id = coalesce($2, hubspot_portal_id)
           where id = $1`,
-        [integrationId],
+        [integrationId, report.portalId ?? null],
       );
     }
 
@@ -137,7 +150,34 @@ async function testHubSpot(sealed: SealedSecret): Promise<ConnectionReport> {
     details.push(`${properties.existing.length} properties already present.`);
   }
 
-  return { ok: true, summary: `HubSpot portal ${account.portalId} reachable`, details };
+  return {
+    ok: true,
+    summary: `HubSpot portal ${account.portalId} reachable`,
+    details,
+    portalId: account.portalId,
+  };
+}
+
+/**
+ * Slack has no way to validate an incoming webhook without using it - there is
+ * no endpoint that reports whether a URL is live. So this posts a real message
+ * and says so, rather than reporting a success it has not actually observed.
+ * What it proves is worth the visible message: that the URL still resolves,
+ * the channel still exists, and the app has not been uninstalled - the three
+ * ways a webhook configured months ago is silently dead by the time a hot lead
+ * needs it.
+ */
+async function testSlack(sealed: SealedSecret): Promise<ConnectionReport> {
+  await SlackNotifier.fromSealedSecret(sealed).verifyConnection();
+
+  return {
+    ok: true,
+    summary: "Slack webhook accepted a test message",
+    details: [
+      "A test message was posted to the connected channel - it is visible to the client.",
+      "Hot leads scoring above the campaign's threshold will be delivered here.",
+    ],
+  };
 }
 
 async function testSheets(

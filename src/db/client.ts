@@ -1,5 +1,6 @@
 import { Pool, type PoolClient } from "pg";
 import { env } from "@/lib/env";
+import { logger } from "@/lib/observability/log";
 
 /**
  * Database access. Three connections, three privilege levels:
@@ -35,13 +36,21 @@ export function pool(kind: ConnectionKind = "app"): Pool {
   if (!existing) {
     existing = new Pool({
       connectionString: urlFor(kind),
-      max: kind === "owner" ? 2 : 10,
+      // Serverless multiplies pools: every warm instance holds its own. A
+      // small ceiling against a pooled connection string is what keeps a
+      // traffic spike from exhausting the database's connection slots, which
+      // fails as "cannot connect" across the whole app rather than as
+      // backpressure on the one route that spiked.
+      max: kind === "owner" ? 2 : (env().DB_POOL_MAX ?? (env().APP_ENV === "development" ? 10 : 3)),
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,
       application_name: `leadcalling-${kind}`,
     });
     existing.on("error", (err) => {
-      console.error(JSON.stringify({ level: "error", msg: "pg pool error", kind, err: err.message }));
+      logger.error("pg pool error", {
+        kind,
+        err: err.message,
+      });
     });
     pools.set(kind, existing);
   }

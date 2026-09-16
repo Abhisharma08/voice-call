@@ -40,6 +40,26 @@ const schema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(12),
 
   APP_URL: z.string().url(),
+
+  /**
+   * Shared secret for the scheduled sweep at `/api/cron/tick`. Vercel Cron
+   * sends it as `Authorization: Bearer $CRON_SECRET`.
+   *
+   * The endpoint refuses to serve without it rather than running open, so a
+   * missing value costs retries and outbox delivery, not isolation. It is
+   * still required outside development: on a serverless platform this
+   * scheduler is the only thing that dials a lead whose retry came due, and a
+   * deploy that silently has no scheduler looks exactly like one where nobody
+   * is calling anyone back.
+   */
+  CRON_SECRET: z.string().min(24, "Use at least 24 characters").optional(),
+
+  /**
+   * Per-pool connection ceiling. Every serverless instance opens its own
+   * pool, so the useful number on Vercel is small and the connection string
+   * should be a pooled one (Neon's `-pooler` host, Supabase's port 6543).
+   */
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(50).optional(),
 });
 
 let cached: z.infer<typeof schema> | null = null;
@@ -71,6 +91,14 @@ export function env(): z.infer<typeof schema> {
   // enforced against a non-owner role).
   if (e.APP_ENV !== "development" && e.DATABASE_URL_APP === e.DATABASE_URL) {
     throw new Error("DATABASE_URL_APP must not be the migration owner connection");
+  }
+
+  if (e.APP_ENV !== "development" && !e.CRON_SECRET) {
+    throw new Error(
+      "CRON_SECRET is required outside development: without it nothing dials a lead " +
+        "whose retry or callback comes due. Generate one with " +
+        "`node -e \"console.log(require('crypto').randomBytes(32).toString('base64url'))\"`",
+    );
   }
 
   cached = e;

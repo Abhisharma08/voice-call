@@ -231,13 +231,12 @@ export async function setCampaignActive(formData: FormData): Promise<ActionResul
     if (active) {
       const r = await ctx.tx.query<{
         compliance_approved_at: Date | null;
-        consent_basis: string | null;
         script: string | null;
         google_sheet_id: string | null;
         hubspot_integration_id: string | null;
         questions: string;
       }>(
-        `select c.compliance_approved_at, c.consent_basis, c.script,
+        `select c.compliance_approved_at, c.script,
                 c.google_sheet_id, c.hubspot_integration_id,
                 (select count(*) from qualification_rules q where q.campaign_id = c.id) as questions
            from campaigns c where c.id = $1`,
@@ -249,7 +248,6 @@ export async function setCampaignActive(formData: FormData): Promise<ActionResul
 
       const blockers = activationBlockers({
         complianceApprovedAt: c.compliance_approved_at,
-        consentBasis: c.consent_basis,
         script: c.script,
         questions: Number(c.questions),
         googleSheetId: c.google_sheet_id,

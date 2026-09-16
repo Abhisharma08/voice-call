@@ -232,7 +232,7 @@ an unconfigured provider fails legibly instead of half-working.
 | `/api/internal/dial`, `/analyze`, `/sync` | Service token | Stage endpoints, idempotent on their own keys |
 | `/api/auth/login`, `/logout`, `/api/tenant` | Session cookie | Admin shell |
 | `/api/leads/reveal`, `/api/review/resolve` | Session cookie + permission | Audited actions |
-| `GET /api/health` | None | Liveness |
+| `GET /api/health` | None (detail: `CRON_SECRET`) | Liveness and readiness; migration/provider detail only for an authenticated caller |
 
 ---
 
@@ -275,8 +275,12 @@ client and trust it as authorization."
 A denied tenant returns the same 404 and the same message as a tenant that does
 not exist (PRD 23.3).
 
-`src/middleware.ts` only checks that a session cookie is present. It runs on
-the edge with no database access, so it cannot validate anything — it is a
+`src/proxy.ts` only checks that a session cookie is present. Next.js 16
+deprecated the `middleware` file convention in favour of `proxy`, which also
+changed the default runtime from edge to Node.js — so the old reason this
+could not reach the database is gone, but not the reason it should not. Next's
+own guidance is that a proxy may be "deployed to your CDN", so whatever it
+concludes is a hint rather than a fact the application may rely on. It is a
 redirect convenience, not a security boundary.
 
 ### Staff are scoped by assignment, not by employment
@@ -353,6 +357,41 @@ agency did not run the opt-in funnel and has not independently verified it.
 What still stops a call is a **withdrawal**: an explicit opt-out or a DNC
 request after the form. That is a different permission from the one the form
 collected, and it is untouched.
+
+### The pre-authentication surface has a ceiling, and it is shared
+
+Three endpoints do real work before they know who is calling. `/api/auth/login`
+verifies a password with scrypt at N = 2^16 — roughly 300ms of CPU and 64MB of
+memory per attempt, which is what makes a stolen hash expensive to crack and
+also what makes an unmetered login the cheapest way to exhaust an instance. The
+HubSpot and voice webhooks resolve a portal and unseal that client's credential
+*before* a signature can be checked, because the signature is verified with the
+client's own secret.
+
+The counter is a row in PostgreSQL (migration 0011), not a `Map` in the
+process. On a serverless platform an in-process limiter is not a weaker limit,
+it is *no* limit: every warm instance holds its own memory, so a ceiling of 10
+becomes 10 × however many instances the platform decided to run — a number the
+application neither chooses nor observes — and it resets on every cold start,
+which is exactly when a flood is arriving.
+
+`app.rate_limit_consume()` does the check and the increment in one statement,
+so two concurrent requests cannot both read 9 and both write 10. Login is
+limited per address *and* per account: the first bounds a flood, the second
+catches a distributed guess at one known address, and evaluation stops at the
+first denial so an attacker cannot lock a real user out of their own account by
+flooding the address rule.
+
+It **fails open**. Every endpoint it protects needs the same database to do its
+actual work, so a limiter that cannot reach PostgreSQL is guarding a request
+that was going to fail anyway; failing closed would turn a database blip into a
+total outage of lead intake, dropping real leads to defend against an attacker
+who could not have got one ingested either.
+
+Per-address limits are only as trustworthy as the proxy in front of the app.
+Behind Vercel they are, because the platform sets those headers and replaces
+whatever the client sent. Exposed directly to the internet they are not — which
+is why the per-account login rule is keyed on the email instead.
 
 ### A lead dials itself; the scheduler is a safety net
 
@@ -440,6 +479,8 @@ db/migrations/          Authoritative SQL. Forward-only, checksummed.
   0008_consent_recorded_not_required.sql  The consent gate removed entirely
   0009_lead_enquiry.sql              What the lead actually asked for, encrypted
   0010_hubspot_free_tier_intake.sql  Private-app subscriptions, portal resolution
+  0011_rate_limiting.sql             Shared counters for the pre-auth surface
+  0012_readiness_grants.sql          Migration ledger readable by the runtime roles
 scripts/                migrate / seed / reset / worker / tunnel / demo
 src/db/                 Pools, scoped transactions, typed schema mirror
 src/lib/crypto/         KMS envelope encryption, PII, password hashing
@@ -448,11 +489,15 @@ src/lib/leads/          Intake, eligibility, DNC gate, HubSpot event and campaig
 src/lib/calling/        Queue, windows, retry ladder, worker, results, post-response dispatch
 src/lib/qualification/  Schema, analysis, provider registry, scoring, review gate, resolution
 src/lib/providers/      Voice adapter interface: mock, Sarvam, Twilio
-src/lib/integrations/   HubSpot (+ signature verification), Google Sheets, transactional outbox
+src/lib/integrations/   HubSpot (+ signature verification), Google Sheets, Slack, transactional outbox
 src/lib/campaigns/      Campaign configuration schema, versioning, activation checks
 src/lib/onboarding/     Vertical templates and the one-transaction client setup
 src/lib/actions.ts      Permission + tenant scope + audit wrapper for every write
 src/lib/audit.ts        Append-only audit trail
+src/lib/ratelimit.ts    Shared rate limiting for the pre-authentication surface
+src/lib/observability/  Structured logging with redaction
+src/instrumentation.ts  Unhandled server errors, as structured lines
+src/proxy.ts            Cookie gate (Next 16 renamed `middleware` to `proxy`)
 src/app/                Next.js App Router; (admin) is the shell, api/ the HTTP surface
 n8n/                    W01-W04 workflow definitions (not in use; see n8n/README.md)
 tests/unit/             No database required
@@ -515,10 +560,14 @@ Three things are easy to get wrong and worth repeating here:
   serves, and is there for local testing against a phone that actually rings.
   Neither has been run against a production account or volume, and provider
   choice is a compliance decision (PRD 17.3).
-- **Notification transport** (PRD 16). The routing event, the hot-lead payload
-  and the masked phone number are produced; the email/Slack delivery is not.
-- **Production hardening** (Phase 3): load testing, alerting on the PRD 18.3
-  signals, dead-letter replay UI, backup/restore drill, security testing.
+- **Email notifications** (PRD 16). Slack delivery is built - an incoming
+  webhook per client, sealed like any other credential, delivered through the
+  sync outbox so an outage is a retry rather than a lost hot lead. Email is
+  not, and neither is per-campaign routing of who gets told.
+- **The rest of Phase 3**: load testing, alerting *on* the PRD 18.3 signals
+  (they are now emitted as structured lines, but nothing pages anyone),
+  backup/restore drill, security testing. Rate limiting, the dead-letter replay
+  UI, structured logging and readiness checks are done.
 - **Live transfer, multi-channel follow-up, A/B testing** (Phase 4).
 
 Navigation entries for the unbuilt surfaces render a placeholder naming the

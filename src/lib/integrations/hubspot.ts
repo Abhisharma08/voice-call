@@ -16,6 +16,16 @@ const API_BASE = "https://api.hubapi.com";
 
 export interface HubSpotCredentials {
   accessToken: string;
+  /**
+   * The private app's client secret, which signs its webhooks.
+   *
+   * Optional because a portal that pushes leads some other way - a paid
+   * account's workflow action, or a relay we control - never needs it. Where
+   * intake comes from a private-app subscription it is required, and it is the
+   * only thing standing between that endpoint and anyone who knows a portal
+   * id.
+   */
+  clientSecret?: string;
 }
 
 export class IntegrationError extends Error {
@@ -74,6 +84,42 @@ export class HubSpotClient {
     await this.request(`/crm/v3/objects/contacts/${encodeURIComponent(recordId)}`, "PATCH", {
       properties: contactProperties(update),
     });
+  }
+
+  /**
+   * Read a contact's properties.
+   *
+   * Intake needs this because a private-app webhook carries no properties -
+   * only the object id - so on a free HubSpot portal this call is the only way
+   * to learn the lead's name, phone and enquiry.
+   *
+   * The property list is explicit because the CRM API returns *only* what is
+   * named: omitting it yields HubSpot's small default set, and the phone and
+   * the enquiry would silently be missing. A property that does not exist in
+   * the portal is not an error - it comes back absent, which the mapper reads
+   * as null, so a client whose form lacks a field still ingests.
+   */
+  async getContact(
+    contactId: string,
+    properties: string[],
+  ): Promise<Record<string, unknown> | null> {
+    const query = new URLSearchParams({ properties: properties.join(",") });
+
+    try {
+      const body = (await this.request(
+        `/crm/v3/objects/contacts/${encodeURIComponent(contactId)}?${query}`,
+        "GET",
+        undefined,
+      )) as { properties?: Record<string, unknown> } | null;
+
+      return body?.properties ?? null;
+    } catch (err) {
+      // A contact created and deleted before we fetched it is a real race, not
+      // a fault. Null lets intake record the event as handled rather than
+      // failing the delivery and having HubSpot retry it for 24 hours.
+      if (err instanceof IntegrationError && err.status === 404) return null;
+      throw err;
+    }
   }
 
   /** FR-043: create the follow-up task that carries the call context. */

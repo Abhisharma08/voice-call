@@ -1,8 +1,10 @@
 import { requireUser } from "@/lib/auth/current-user";
 import { withTenant } from "@/lib/auth/tenant";
 import { can } from "@/lib/auth/rbac";
+import { providerDiagnostics } from "@/lib/providers/voice";
 import { AddIntegrationForm } from "./add-integration-form";
 import { TestConnection } from "./test-connection";
+import { DeadLetters, type DeadLetter } from "./dead-letters";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +32,7 @@ export default async function IntegrationsPage() {
 
   const tenantId = user.activeTenantId;
 
-  const { integrations, spreadsheetId, sheetRange } = await withTenant(user, tenantId, async (tx) => {
+  const { integrations, spreadsheetId, sheetRange, deadLetters } = await withTenant(user, tenantId, async (tx) => {
     const r = await tx.query<{
       id: string;
       type: string;
@@ -59,10 +61,68 @@ export default async function IntegrationsPage() {
         where google_sheet_id is not null order by created_at limit 1`,
     );
 
+    /**
+     * Deliveries that exhausted their retries (PRD 18.3). Joined out to the
+     * call so a row reads as "this client's lead did not reach their CRM"
+     * rather than as an opaque outbox id - which is the difference between a
+     * panel an operator acts on and one they scroll past.
+     *
+     * `phone_last4` only: the full number is encrypted and requires an audited
+     * reveal (PRD 26.2), and identifying a stuck row does not need it.
+     */
+    const dead = await tx.query<{
+      id: string;
+      target: DeadLetter["target"];
+      attempts: number;
+      last_error: string | null;
+      dead_since: Date;
+      call_id: string | null;
+      phone_last4: string | null;
+      campaign_name: string | null;
+    }>(
+      // next_attempt_at is not null and is stamped at the moment the row
+      // dead-lettered, so it is the "since" without a coalesce.
+      //
+      // The cast to uuid is guarded rather than direct: an unparseable
+      // payload->>'call_id' would raise and take the whole Integrations page
+      // down with it, which is a poor way to find out one outbox row is
+      // malformed. Guarded, that row simply lists with no call context.
+      //
+      // CASE rather than `cast ... and regex`: a boolean AND in a join
+      // condition has no guaranteed evaluation order, so the planner is free
+      // to attempt the cast before the test that was meant to protect it.
+      // CASE is defined to evaluate only the branch it selects.
+      `select o.id, o.target, o.attempts, o.last_error,
+              o.next_attempt_at as dead_since,
+              ca.id as call_id, l.phone_last4, c.name as campaign_name
+         from sync_outbox o
+         left join call_attempts ca
+                on ca.id = (case
+                              when o.payload->>'call_id' ~
+                                   '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                              then (o.payload->>'call_id')::uuid
+                            end)
+         left join leads l on l.id = ca.lead_id
+         left join campaigns c on c.id = ca.campaign_id
+        where o.status = 'dead_letter'
+        order by o.target, dead_since desc
+        limit 200`,
+    );
+
     return {
       integrations: r.rows,
       spreadsheetId: sheet.rows[0]?.google_sheet_id ?? null,
       sheetRange: sheet.rows[0]?.google_sheet_tab ?? null,
+      deadLetters: dead.rows.map<DeadLetter>((row) => ({
+        id: row.id,
+        target: row.target,
+        attempts: row.attempts,
+        lastError: row.last_error,
+        deadSince: row.dead_since.toISOString(),
+        callId: row.call_id,
+        leadPhoneLast4: row.phone_last4,
+        campaignName: row.campaign_name,
+      })),
     };
   });
 
@@ -118,6 +178,60 @@ export default async function IntegrationsPage() {
           ))}
         </div>
       )}
+
+      {/*
+        Undelivered results come before the voice-provider panel and before the
+        add-credential form on purpose: every row is a qualification the client
+        has not received, which is the most urgent thing this page can be
+        telling an operator. When there are none, the section is absent rather
+        than showing an encouraging empty state nobody needs to read.
+      */}
+      {deadLetters.length > 0 ? (
+        <div style={{ marginTop: 24 }}>
+          <h2 style={{ fontSize: 15, margin: "0 0 4px" }}>Undelivered results</h2>
+          <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px" }}>
+            These qualifications exhausted their retries and have not reached their destination.
+          </p>
+
+          <DeadLetters
+            tenantId={tenantId}
+            items={deadLetters}
+            canReplay={can(user.role, "integration:write")}
+          />
+        </div>
+      ) : null}
+
+      {/*
+        Voice providers are platform-wide, not per client: they register from
+        environment variables at boot, and a campaign selects one by name. This
+        panel exists because an unconfigured choice otherwise fails at claim
+        time, in a worker log, minutes after someone thought they had set it up.
+      */}
+      <div style={{ marginTop: 24 }}>
+        <h2 style={{ fontSize: 15, margin: "0 0 4px" }}>Voice providers</h2>
+        <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px" }}>
+          Registered from the environment, shared by every client, selected per campaign.
+        </p>
+
+        <div className="stack">
+          {providerDiagnostics().map((p) => (
+            <div key={p.name} className="card stack" style={{ gap: 6 }}>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <strong>{p.name}</strong>
+                <span className={`pill ${p.registered ? "ok" : "warn"}`}>
+                  {p.registered ? "selectable" : "not configured"}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>{p.note}</div>
+              {p.missing.length > 0 ? (
+                <div style={{ fontSize: 12 }}>
+                  Set {p.missing.map((v) => <code key={v}>{v} </code>)} and restart to register it.
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </div>
 
       {can(user.role, "secret:write") ? (
         <div style={{ marginTop: 20 }}>

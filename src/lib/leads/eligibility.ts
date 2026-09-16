@@ -14,7 +14,6 @@ export type SuppressionReason =
   | "dnc_tenant"
   | "dnc_campaign"
   | "lead_dnc_flag"
-  | "no_consent"
   | "consent_withdrawn"
   | "campaign_inactive"
   | "campaign_not_compliance_approved"
@@ -95,12 +94,11 @@ export async function checkEligibility(
   const campaign = await tx.query<{
     active: boolean;
     service_call_campaign: boolean;
-    consent_mode: "require_record" | "inherit_from_source";
     compliance_approved_at: Date | null;
     calling_config: { max_attempts?: number };
     dial_allowlist: string[];
   }>(
-    `select active, service_call_campaign, consent_mode, compliance_approved_at,
+    `select active, service_call_campaign, compliance_approved_at,
             calling_config, dial_allowlist
        from campaigns where id = $1`,
     [campaignId],
@@ -151,17 +149,13 @@ export async function checkEligibility(
   // consents record exists" - assumed the platform was where consent first
   // became known. In the real operating model it is not: consent is collected
   // at the landing page or Meta lead form, and the lead reaches HubSpot before
-  // this platform sees it.
+  // this platform sees it. Intake records that consent for every lead, so the
+  // absence of a row means the funnel did not pass one along, not that the
+  // lead declined - and it holds nothing back (migration 0008).
   //
-  // So `inherit_from_source` campaigns record consent at intake rather than
-  // gating on it, and only a *withdrawal* stops the call. A campaign whose
-  // list provenance is not established upstream can still be set to
-  // `require_record`, which restores the strict rule.
-  const enforcesConsent =
-    !c.service_call_campaign && c.consent_mode === "require_record";
-
-  // A withdrawal is honoured under either mode. Someone who opted out after
-  // the form is the case the whole record exists for.
+  // What stops a call is a *withdrawal*: an explicit opt-out or DNC request
+  // made after the form. That is a different permission from the one the form
+  // collected, and it is the case this whole record exists for.
   if (!c.service_call_campaign) {
     const withdrawn = await tx.query(
       `select 1 from consents
@@ -179,35 +173,6 @@ export async function checkEligibility(
         reason: "consent_withdrawn",
         detail: "Consent for this lead was withdrawn",
       };
-    }
-  }
-
-  if (enforcesConsent) {
-    const consent = await tx.query<{ status: string }>(
-      `select status from consents
-        where lead_id = $1 and status = 'active'
-        order by captured_at desc limit 1`,
-      [leadId],
-    );
-
-    if (!consent.rowCount) {
-      const anyConsent = await tx.query<{ status: string }>(
-        `select status from consents where lead_id = $1 order by captured_at desc limit 1`,
-        [leadId],
-      );
-      const previous = anyConsent.rows[0];
-
-      return previous
-        ? {
-            eligible: false,
-            reason: "consent_withdrawn",
-            detail: `Most recent consent is ${previous.status}`,
-          }
-        : {
-            eligible: false,
-            reason: "no_consent",
-            detail: "No active consent record for this lead (PRD 26.1)",
-          };
     }
   }
 

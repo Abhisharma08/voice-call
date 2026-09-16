@@ -22,10 +22,14 @@
     "test:db": "vitest run tests/db",
     "test:watch": "vitest",
     "db:seed:phase1": "tsx scripts/seed-phase1.ts",
+    "db:seed:aluempire": "tsx scripts/seed-aluempire.ts",
+    "tunnel": "tsx scripts/tunnel.ts",
+    "worker": "tsx scripts/worker.ts",
     "demo": "tsx scripts/demo.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
+    "@google/genai": "^2.21.0",
     "drizzle-orm": "^0.45.2",
     "libphonenumber-js": "^1.13.12",
     "next": "^16.3.4",
