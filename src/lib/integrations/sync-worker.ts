@@ -9,7 +9,9 @@ import {
 } from "@/lib/integrations/outbox";
 import { HubSpotClient, IntegrationError } from "@/lib/integrations/hubspot";
 import { GoogleSheetsClient, type SheetRow } from "@/lib/integrations/google-sheets";
+import { SlackNotifier } from "@/lib/integrations/slack";
 import { auditInTx } from "@/lib/audit";
+import { logger } from "@/lib/observability/log";
 
 /**
  * Drains sync_outbox (workflow W03 steps 7-9).
@@ -295,9 +297,37 @@ async function notify(tx: PoolClient, item: OutboxItem, deps: SyncDeps): Promise
   if (deps.notifier) {
     await deps.notifier(message);
   } else {
-    // Phase 1 ships the routing event and the payload; the email/Slack
-    // transport is PRD 16's "Notification Layer", configured in a later phase.
-    console.log(JSON.stringify({ level: "info", msg: "hot_lead_notification", ...message }));
+    const sealed = await loadCredentialOrNull(tx, "notification");
+
+    if (sealed) {
+      await buildClient("notification", () => SlackNotifier.fromSealedSecret(sealed)).send(message);
+
+      await auditInTx(tx, {
+        tenantId: item.tenantId,
+        actorType: "service",
+        action: "sync.notification_sent",
+        entityType: "call",
+        entityId: ctx.call_id,
+        // The lead's name and number do not go in the audit metadata; the
+        // audit log answers "was this sent", not "what did it say".
+        metadata: { channel: "slack", intent: ctx.intent, score: ctx.score ?? 0 },
+      });
+    } else {
+      /**
+       * No notification integration for this client. Logged and treated as
+       * done rather than failed: a client who has not connected a channel has
+       * not misconfigured anything, and dead-lettering every hot lead for them
+       * after eight retries would bury the rows that represent real delivery
+       * failures. The routing event is still stamped below, so the hot lead is
+       * visible in the platform either way.
+       */
+      logger.info("hot_lead_notification_undelivered", {
+        reason: "no notification integration configured for this client",
+        tenant: message.tenantName,
+        call_id: message.callId,
+        score: message.score,
+      });
+    }
   }
 
   await tx.query(
@@ -330,6 +360,48 @@ function buildClient<T>(type: string, construct: () => T): T {
 function maskedPhone(enc: Buffer | null): string | null {
   const phone = decryptPiiOrNull(enc);
   return phone ? maskPhone(phone) : null;
+}
+
+/**
+ * The tenant's active integration of `type`, or null if they have none.
+ *
+ * Separate from `loadCredential` because the two callers want opposite things
+ * from a missing integration. A Sheets or HubSpot sync with no credential is a
+ * broken destination and should fail loudly; a client with no notification
+ * channel connected has simply not connected one.
+ *
+ * No campaign argument: notification routing is per client, not per campaign.
+ */
+async function loadCredentialOrNull(
+  tx: PoolClient,
+  type: "notification",
+): Promise<SealedSecret | null> {
+  const r = await tx.query<{
+    key_id: string;
+    wrapped_dek: Buffer;
+    iv: Buffer;
+    ciphertext: Buffer;
+    auth_tag: Buffer;
+  }>(
+    `select s.key_id, s.wrapped_dek, s.iv, s.ciphertext, s.auth_tag
+       from integrations i
+       join secrets s on s.id = i.credential_ref
+      where i.type = $1 and i.status = 'active'
+      order by i.created_at
+      limit 1`,
+    [type],
+  );
+
+  const row = r.rows[0];
+  if (!row) return null;
+
+  return {
+    keyId: row.key_id,
+    wrappedDek: row.wrapped_dek,
+    iv: row.iv,
+    ciphertext: row.ciphertext,
+    authTag: row.auth_tag,
+  };
 }
 
 async function loadCredential(
@@ -368,7 +440,12 @@ async function loadCredential(
 }
 
 async function disableIntegration(tx: PoolClient, item: OutboxItem, reason: string): Promise<void> {
-  const type = item.target === "google_sheets" ? "google_sheets" : "hubspot";
+  // Map the target to its own integration type. This was a two-way choice
+  // while `notification` had no transport; now that it does, defaulting
+  // anything-that-is-not-Sheets to `hubspot` would answer a revoked Slack
+  // webhook by disabling the client's CRM sync - stopping every result from
+  // reaching HubSpot because a chat notification failed.
+  const type = item.target;
   await tx.query(
     `update integrations set status = 'error', last_error = $2 where type = $1 and status = 'active'`,
     [type, reason.slice(0, 500)],

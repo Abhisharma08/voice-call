@@ -1,32 +1,33 @@
 # Connecting everything
 
-Six things plug into this platform. Five are configuration; one needs code
-that does not exist yet.
+Six things plug into this platform, and all six are now configuration.
 
 | What | Effort | Blocking? |
 | --- | --- | --- |
-| 1. Anthropic (qualification) | one env var | No — degrades to review queue |
-| 2. Public URL (webhooks) | one command | Yes, for anything inbound |
-| 3. HubSpot (CRM) | private app + one button | Yes, for CRM sync |
+| 1. Anthropic or Gemini (qualification) | one env var | No — degrades to review queue |
+| 2. Public URL (webhooks) | one command locally, your domain in production | Yes, for anything inbound |
+| 3. HubSpot (CRM) | private app + one button | Yes, for leads and CRM sync |
 | 4. Google Sheets (call log) | service account + share | Yes, for the sheet |
-| 5. n8n (orchestration) | import 4 workflows | No — the API works without it |
-| 6. **Voice provider (calls)** | **write an adapter** | **Yes, for real calls** |
+| 5. Orchestration | one env var — the platform schedules itself | Yes, for retries and callbacks |
+| 6. **Voice provider (calls)** | **credentials, then pick it per campaign** | **Yes, for real calls** |
 
 Do them in this order. Each step is verifiable before you move on, and the
 compliance gate at the end refuses to let you skip the one that matters.
 
 ---
 
-## 1. Anthropic — transcript qualification
+## 1. Transcript qualification — Anthropic or Gemini
 
-Add the key to `.env.local` and restart the dev server:
+Add a key to `.env.local` and restart the dev server:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_WORKSPACE_ID=          # only for an identity-linked key, see below
+GEMINI_API_KEY=                  # optional, registers the Gemini adapter
 ```
 
-The SDK also accepts `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login` profile
-with no env var at all.
+The Anthropic SDK also accepts `ANTHROPIC_AUTH_TOKEN`, or an `ant auth login`
+profile with no env var at all.
 
 **Verify:** run `npm run demo`. Step 4 should print real intents
 (`hot`, `not_interested`, `do_not_call`) rather than `unknown`.
@@ -34,6 +35,35 @@ with no env var at all.
 Without a key, analysis degrades to `unknown` at confidence 0, which always
 trips the review gate. That is PRD 18.2's fallback working — nothing is
 auto-qualified — but no result ever reaches a CRM either.
+
+**If the key is an identity-linked one** (scoped to a person rather than a
+workspace) it also needs `ANTHROPIC_WORKSPACE_ID`. Without it every request
+fails with `anthropic-workspace-id is required` and every analysis degrades —
+which is indistinguishable from having no key at all unless you read the log.
+
+### Choosing the model
+
+Which provider runs is decided per campaign by `campaigns.analysis_model`
+(*Campaigns → your campaign → model*). The prefix selects the adapter: a
+`claude-*` id resolves to Anthropic, a `gemini-*` id to Google. A model no
+adapter claims, or one whose provider has no key, holds that campaign's leads
+for review with a reason naming the registered providers — it never dials on
+and writes a result no model produced.
+
+Two things behave differently on Gemini, both in `providers/gemini.ts`:
+
+- **Prompt caching is implicit.** The Interactions API has no `cache_control`
+  equivalent — caching happens automatically on a shared prefix or not at all.
+  The system prompt is byte-identical per campaign so it is eligible, but a
+  short one can fall under the model's minimum cacheable length and never hit.
+  Per-call cost is less predictable than on Anthropic.
+- **Server-side retention is off.** `store` defaults to true on that API, which
+  would retain transcripts — the most sensitive text here (PRD 26.2). The
+  adapter sets `store: false`. Do not change that without a compliance
+  decision.
+
+Both providers validate against the same Zod schema before anything is
+persisted, so FR-031 holds whichever one answers.
 
 ---
 
@@ -93,8 +123,90 @@ whenever you like.
 
 ### Send leads in
 
-Point a HubSpot workflow or webhook at your n8n W01 production URL (step 5), or
-POST directly:
+**If the client is on the free plan, use the private app path below.** Free
+HubSpot has no workflows, so the *Send a webhook* action does not exist for
+them. Private apps are available on every tier.
+
+#### Free plan: private app subscription
+
+A private app can subscribe to `contact.creation`, and this platform takes that
+subscription directly:
+
+```
+POST $APP_URL/api/webhooks/hubspot/events
+```
+
+No token in the URL and no header to configure — which is not a shortcut, it is
+a constraint. HubSpot cannot attach a credential of ours to a webhook, so it
+signs each delivery instead, and the payload's `portalId` is what names the
+client. Three consequences worth knowing before you set it up:
+
+1. **The connection test is not optional.** It is what records the portal id
+   (from `/account-info/v3/details`), and without that mapping an inbound event
+   resolves to no client and is refused. Press *Test connection* once on
+   `/integrations` after adding the credential.
+2. **The credential needs the client secret as well as the access token**, or
+   nothing can be verified:
+   `{"accessToken": "pat-na1-...", "clientSecret": "..."}`
+3. **The event carries no contact.** It names an object id, so the platform
+   fetches the contact's properties back over the CRM API. Intake therefore
+   depends on the access token being valid, not just the write-back — an
+   expired token stops leads arriving, not merely syncing.
+
+Setting it up in the client's HubSpot:
+
+- *Settings → Integrations → Private apps → Create*, with the
+  `crm.objects.contacts.read` and `crm.objects.contacts.write` scopes.
+- Copy the **access token** and the **client secret** into a HubSpot
+  integration here, then press *Test connection*.
+- In the private app's **Webhooks** tab, set the target URL above and subscribe
+  to `contact.creation`.
+
+Which campaign a lead lands in comes from a contact property, configured under
+*Lead routing* on the campaign — one private app has a single target URL for
+the whole portal, so it cannot be a query parameter. A client with one active
+campaign needs no routing at all: every lead goes there.
+
+Rate limits are the reason to keep the subscription narrow: a free portal
+allows 100 requests per 10 seconds per app, and every event costs one contact
+fetch. Subscribe to `contact.creation`, not to property changes on a busy
+property.
+
+**Verify:** create a test contact in HubSpot with a phone number. `/leads`
+should show it within seconds, and `/calls` an attempt right behind it. If the
+lead never appears, the log says which of the three steps above is missing —
+`unknown_portal` means the connection test has not run.
+
+#### Professional and above: workflow action
+
+**`/api/webhooks/hubspot/leads?campaign=<uuid>`** takes HubSpot's own workflow
+payload, so a *Send a webhook* action can post to it with no translation layer
+and no contact fetch. This is the URL **Clients → Onboard a client** shows
+under "Professional or Enterprise", together with the token for the
+`Authorization` header.
+
+```bash
+curl -X POST "$APP_URL/api/webhooks/hubspot/leads?campaign=<campaign uuid>" \
+  -H "authorization: Bearer $SERVICE_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '[{"eventId":"hs-evt-123","objectId":"123456789","properties":{
+        "firstname":"Rahul","lastname":"Sharma","phone":"+919876543210",
+        "requirement":"12 windows, Sector 78 Noida"}}]'
+```
+
+The campaign is a query parameter because HubSpot's payload cannot carry it and
+a token is per tenant, not per campaign. Property names are mapped in
+`src/lib/leads/hubspot-event.ts`; unknown ones are ignored rather than
+rejected, so a new field on the client's form cannot start failing intake. Set
+the enquiry text deliberately — `requirement`, `product_interest`,
+`what_are_you_looking_for` or `message` — because the call says it back to the
+lead rather than guessing.
+
+**Either endpoint places the call itself**, on the same invocation, after
+responding. There is no scheduler to wait for and nothing else to run.
+
+**`/api/webhooks/leads`** takes this platform's own event shape, for anything
+you control:
 
 ```bash
 curl -X POST "$APP_URL/api/webhooks/leads" \
@@ -154,41 +266,44 @@ destination the sync will not actually write to proves nothing.
 
 ---
 
-## 5. n8n
+## 5. Orchestration — the platform schedules itself
 
-Import the four workflows from `n8n/`:
+**Nothing to install.** This step used to be "import four n8n workflows"; three
+of the four were a timer and a payload reshape, and both now live in the
+platform:
 
-| File | Trigger | Does |
-| --- | --- | --- |
-| `W01-lead-intake.json` | HubSpot webhook | Normalises and posts to intake |
-| `W02-calling-worker.json` | every minute | Claims queued leads and dials |
-| `W03-qualification.json` | call completed | Analyses, then drains the outbox |
-| `W04-retry-callback.json` | every 5 minutes | Sweeps due retries and callbacks |
+| Was | Now |
+| --- | --- |
+| W01 — reshape HubSpot's payload | `/api/webhooks/hubspot/leads`, typechecked and tested |
+| W02 — dial every minute | the intake webhook dials on its own invocation |
+| W03 — notice a completed call, then analyse | the voice callback qualifies inline |
+| W04 — sweep retries and callbacks every 5 minutes | `/api/cron/tick` |
 
-Then:
+The reason this collapsed so cleanly is that n8n never held any state:
+the queue, locks, retry ladder, idempotency keys and outbox are all PostgreSQL
+rows. A workflow engine was scheduling work it did not own, and a schedule is a
+cron.
 
-1. **Credential** — an n8n *Header Auth* credential named
-   `Lead Platform Service Token`, with name `Authorization` and value
-   `Bearer svc_...`
-2. **Variables** — `PLATFORM_URL` (your public URL) and `CAMPAIGN_ID`
-3. **Publish** each workflow. n8n production webhook URLs only work on a
-   published workflow [Ref. 1]
+Set `CRON_SECRET` and point a scheduler at the sweep:
+
+```bash
+curl -X POST "$APP_URL/api/cron/tick" -H "authorization: Bearer $CRON_SECRET"
+```
+
+On Vercel, `vercel.json` already declares it and the platform sends that header
+itself — see [`DEPLOY.md`](DEPLOY.md). Locally, `npm run worker` calls the same
+endpoint on a timer.
+
+The `n8n/` directory is kept for reference and for anyone who wants a workflow
+engine in front of intake. It is no longer part of the running system.
 
 ### Getting a service token
 
-Tokens are stored only as a SHA-256 hash, so the plaintext is shown once. The
-Phase 1 seed prints one; to mint another:
+**Clients → Onboard a client** mints one and shows it beside the webhook URL to
+use it with. Tokens are stored only as a SHA-256 hash, so the plaintext appears
+once — a lost token is replaced, not recovered.
 
-```bash
-npm run db:seed:phase1   # prints a fresh token, dev only
-```
-
-n8n holds no state. The queue, locks, retry ladder, idempotency keys and
-outbox all live in PostgreSQL, so a workflow can be re-run, duplicated, or fail
-halfway without double-calling a lead.
-
-**You do not need n8n to test.** The four endpoints it calls work directly —
-`npm run demo` drives the whole pipeline through them.
+For the development fixtures, `npm run db:seed:phase1` prints one.
 
 ---
 
@@ -385,8 +500,7 @@ Consent is collected upstream — the landing page or Meta lead form — and the
 lead reaches HubSpot before this platform sees it. So the platform **records**
 consent rather than demanding it.
 
-New campaigns default to `inherit_from_source`. On intake every lead still gets
-a dated `consents` row, derived in this order:
+On intake every lead gets a dated `consents` row, derived in this order:
 
 1. Consent that arrived with the event. W01 maps HubSpot's fields
    (`consent_basis`, `hs_legal_basis`, `hs_latest_source`) through when set.
@@ -405,14 +519,17 @@ origin*) is optional and only makes the audit trail easier to read.
 Two things still stop a call:
 
 - **A withdrawal.** If a lead's consent is marked withdrawn, they are not
-  called — under either mode. Someone unsubscribing after the form is the case
-  the record exists for.
+  called. Someone unsubscribing after the form is the case the record exists
+  for, and it is a different permission from the one the form collected.
 - **DNC.** Manual, voice-detected, or carrier-reported (see the NDNC note in
   step 6).
 
-Set a campaign to `require_record` only for a list whose provenance is not
-established upstream — a purchased list, or a client import with no funnel
-behind it. Then a lead without an explicit consent record is suppressed.
+For a list whose provenance is *not* established upstream — a purchased list,
+or a client import with no funnel behind it — this platform has no gate to
+switch on, and never usefully had one: the missing-record check it used to run
+only ever fired on leads the funnel had already collected consent from. Whether
+such a list may be called at all is a decision for the compliance review in
+step 8, where a named person signs off on what the list actually is.
 
 ## 8. Before any real call: the compliance gate
 
@@ -457,15 +574,15 @@ PostgreSQL, it is outside the platform's access-control layer.
 
 | Symptom | Cause |
 | --- | --- |
-| Every result says `unknown`, confidence 0 | No Anthropic credentials (step 1) |
+| Every result says `unknown`, confidence 0 | No Anthropic credentials (step 1) — or a key that is set but rejected, which looks identical. Check the dev server log for a 400: an identity-linked key needs `ANTHROPIC_WORKSPACE_ID` set as well |
 | HubSpot sync 400s | Custom properties missing — press *Test connection* |
 | Sheets sync 404s | Spreadsheet not shared with the service account |
 | `Unable to parse range: Call Log!A1:V1` | Was a bug in this platform, fixed. A tab name with a space must be quoted in A1 notation (`'Call Log'!A1:V1`); the client now quotes it, and creates the tab if it does not exist |
 | Integration flips to `error` and stops | PRD 18.2: auth failure disables rather than retrying. Fix the credential, press *Test connection* to re-enable |
 | Call results never arrive | `APP_URL` is stale or the tunnel died |
 | Campaign will not activate | Open items on the compliance checklist |
-| Leads suppressed as `no_consent` | The campaign is set to `require_record` and no basis is declared. Switch it to `inherit_from_source` if consent comes from the funnel |
-| Leads suppressed as `consent_withdrawn` | A `consents` row for that lead is marked withdrawn. Correct under either mode |
+| Leads suppressed as `no_consent` | Gone as of migration 0008. Leads the old gate stranded were re-queued by it; if you still see this, the migration has not been applied |
+| Leads suppressed as `consent_withdrawn` | A `consents` row for that lead is marked withdrawn — an opt-out after the form. Working as intended |
 | Leads suppressed as `not_on_dial_allowlist` | The campaign has a dial allowlist set, for a trial provider account. Clear it to go live |
 | Trial call connects but cuts off | Twilio trial calls are capped at 10 minutes |
 | Only 5 leads dialled | `concurrency_limit` on the campaign (FR-022). Working as intended |

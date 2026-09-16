@@ -1,10 +1,8 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
-import {
-  QualificationSchema,
-  unknownResult,
-  type QualificationResult,
-} from "@/lib/qualification/schema";
+import { resolveAnalysisProvider } from "@/lib/qualification/providers";
+import { unknownResult, type QualificationResult } from "@/lib/qualification/schema";
+import { logger } from "@/lib/observability/log";
+
+export { __setAnthropicClient } from "@/lib/qualification/providers/anthropic";
 
 /**
  * Transcript analysis (PRD 10, FR-030 to FR-034), workflow W03 step 3.
@@ -20,6 +18,11 @@ import {
  *   terms, or product details" - so the system prompt is explicit that null is
  *   the correct answer for anything the lead did not say, and the review gate
  *   catches the cases where it hedges.
+ *
+ * Which model runs is resolved from `campaigns.analysis_model` through the
+ * registry in ./providers. Everything in this file is provider-neutral: the
+ * prompt, the schema, and the rule that a failure becomes a review rather than
+ * a guess are the same whichever adapter answers.
  */
 
 export interface AnalyzeRequest {
@@ -48,21 +51,12 @@ export interface AnalyzeResponse {
   degraded: boolean;
 }
 
-let client: Anthropic | null = null;
-
-function anthropic(): Anthropic {
-  // Credentials resolve from ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or an
-  // `ant auth login` profile - see the SDK's resolution order.
-  client ??= new Anthropic();
-  return client;
-}
-
 /**
  * The stable half of the prompt. Kept byte-identical across every call for a
  * given prompt version so it caches: with one system prompt shared by every
  * call in a campaign, the cached prefix is read on all but the first request.
  */
-function systemPrompt(campaign: AnalyzeRequest["campaign"]): string {
+export function systemPrompt(campaign: AnalyzeRequest["campaign"]): string {
   const questionList = campaign.questions
     .map((q) => `- ${q.fieldName}${q.required ? " (required)" : ""}: ${q.question}`)
     .join("\n");
@@ -99,76 +93,62 @@ Intent taxonomy:
 - unknown: the transcript does not support a classification`;
 }
 
+export function userPrompt(request: AnalyzeRequest): string {
+  return [
+    "Analyse this call transcript.",
+    request.callDurationSec !== null ? `Call duration: ${request.callDurationSec} seconds.` : "",
+    "",
+    "<transcript>",
+    request.transcript,
+    "</transcript>",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 export async function analyzeTranscript(request: AnalyzeRequest): Promise<AnalyzeResponse> {
   const startedAt = Date.now();
 
+  // Resolution can throw for a model no adapter claims, or one whose provider
+  // has no credentials. That is caught below with everything else, so a
+  // misconfigured campaign holds its leads for review rather than losing them.
+  let provider;
   try {
-    const response = await anthropic().messages.parse({
+    provider = resolveAnalysisProvider(request.campaign.model);
+  } catch (err) {
+    return degraded(request, startedAt, err instanceof Error ? err.message : String(err), null);
+  }
+
+  try {
+    const response = await provider.analyze({
       model: request.campaign.model,
-      max_tokens: 4096,
-      thinking: { type: "adaptive" },
-      output_config: {
-        effort: request.campaign.effort as "low" | "medium" | "high" | "xhigh" | "max",
-        format: zodOutputFormat(QualificationSchema),
-      },
-      system: [
-        {
-          type: "text",
-          text: systemPrompt(request.campaign),
-          // The system prompt is identical for every call in this campaign;
-          // caching it keeps per-call cost close to the transcript alone.
-          cache_control: { type: "ephemeral" },
-        },
-      ],
-      messages: [
-        {
-          role: "user",
-          content: [
-            "Analyse this call transcript.",
-            request.callDurationSec !== null ? `Call duration: ${request.callDurationSec} seconds.` : "",
-            "",
-            "<transcript>",
-            request.transcript,
-            "</transcript>",
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        },
-      ],
+      effort: request.campaign.effort,
+      system: systemPrompt(request.campaign),
+      user: userPrompt(request),
     });
 
-    const parsed = response.parsed_output;
-    if (!parsed) {
+    if (!response.parsed) {
       // Structured output did not validate. PRD 18.2: "LLM schema failure -
       // Yes, limited - Fallback to manual review."
-      return degraded(
-        request,
-        startedAt,
-        "Model response did not satisfy the qualification schema.",
-        response.usage,
-      );
+      return degraded(request, startedAt, "Model response did not satisfy the qualification schema.", {
+        inputTokens: response.inputTokens,
+        outputTokens: response.outputTokens,
+      });
     }
 
     return {
-      result: parsed,
+      result: response.parsed,
       model: response.model,
       promptVersion: request.campaign.promptVersion,
       latencyMs: Date.now() - startedAt,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      inputTokens: response.inputTokens,
+      outputTokens: response.outputTokens,
       degraded: false,
     };
   } catch (err) {
     // A rate limit or outage must not lose the call. The result is held for
     // review and the caller decides whether to retry.
-    const message =
-      err instanceof Anthropic.RateLimitError
-        ? "Analysis rate limited"
-        : err instanceof Anthropic.APIError
-          ? `Analysis failed with API error ${err.status}`
-          : `Analysis failed: ${err instanceof Error ? err.message : String(err)}`;
-
-    return degraded(request, startedAt, message, null);
+    return degraded(request, startedAt, provider.describeError(err), null);
   }
 }
 
@@ -176,20 +156,30 @@ function degraded(
   request: AnalyzeRequest,
   startedAt: number,
   reason: string,
-  usage: { input_tokens: number; output_tokens: number } | null,
+  usage: { inputTokens: number | null; outputTokens: number | null } | null,
 ): AnalyzeResponse {
+  /**
+   * The reason travels in the result and is shown on the review item, which is
+   * the right place for the operator handling that one lead. It is the wrong
+   * place to notice that *every* lead is degrading - a bad key or a wrong model
+   * id looks identical to a queue of genuinely ambiguous calls until someone
+   * opens one and reads it.
+   *
+   * So it is logged too. Model and reason only: the transcript and the lead's
+   * details are not diagnostic here and do not belong in a log (PRD 26.2).
+   */
+  logger.error("qualification degraded to unknown; result held for review", {
+    model: request.campaign.model,
+    reason,
+  });
+
   return {
     result: unknownResult(reason),
     model: request.campaign.model,
     promptVersion: request.campaign.promptVersion,
     latencyMs: Date.now() - startedAt,
-    inputTokens: usage?.input_tokens ?? null,
-    outputTokens: usage?.output_tokens ?? null,
+    inputTokens: usage?.inputTokens ?? null,
+    outputTokens: usage?.outputTokens ?? null,
     degraded: true,
   };
-}
-
-/** Test seam: replace the Anthropic client with a stub. */
-export function __setAnthropicClient(stub: Anthropic | null): void {
-  client = stub;
 }

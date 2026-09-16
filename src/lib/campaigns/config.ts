@@ -81,6 +81,18 @@ export const CampaignConfigSchema = z
     dialAllowlist: z
       .array(z.string().regex(/^\+[1-9]\d{6,14}$/, "Use E.164, e.g. +919876543210"))
       .max(25),
+    /**
+     * Which campaign an inbound lead belongs to, when the request cannot say.
+     *
+     * A HubSpot private app - the only webhook a free portal can send - has
+     * one target URL for the whole account, so the campaign cannot be a query
+     * parameter per workflow. It is read from a contact property instead:
+     * `intakeProperty` names the property, `intakeValues` are the values that
+     * select this campaign, and `intakeDefault` catches everything unmatched.
+     */
+    intakeProperty: z.string().max(120).nullable(),
+    intakeValues: z.array(z.string().min(1).max(200)).max(50),
+    intakeDefault: z.boolean(),
     callingConfig: CallingConfigSchema,
     routingConfig: RoutingConfigSchema,
     scoringRubric: ScoringRubricSchema,
@@ -97,6 +109,16 @@ export const CampaignConfigSchema = z
   .refine((c) => new Set(c.questions.map((q) => q.fieldName)).size === c.questions.length, {
     message: "Question field names must be unique",
     path: ["questions"],
+  })
+  .refine((c) => c.intakeValues.length === 0 || Boolean(c.intakeProperty?.trim()), {
+    message: "Name the HubSpot property these values are matched against",
+    path: ["intakeProperty"],
+  })
+  .refine((c) => new Set(c.intakeValues.map((v) => v.trim().toLowerCase())).size === c.intakeValues.length, {
+    // Duplicates are harmless to routing but a sign the operator thinks two
+    // different values are configured when only one is.
+    message: "Routing values must be unique",
+    path: ["intakeValues"],
   })
   .refine(
     (c) => {
@@ -135,6 +157,9 @@ export const DEFAULT_CAMPAIGN_CONFIG: Omit<CampaignConfig, "name"> = {
   googleSheetTab: "Call Log!A:V",
   hubspotIntegrationId: null,
   dialAllowlist: [],
+  intakeProperty: null,
+  intakeValues: [],
+  intakeDefault: false,
   callingConfig: {
     window_start: "09:30",
     window_end: "18:30",
@@ -165,6 +190,7 @@ export async function loadCampaignConfig(
             analysis_model, analysis_effort, concurrency_limit,
             review_confidence_threshold, review_boundary_band,
             google_sheet_id, google_sheet_tab, hubspot_integration_id, dial_allowlist,
+            intake_property, intake_values, intake_default,
             calling_config, routing_config, scoring_rubric, config_version, active
        from campaigns where id = $1`,
     [campaignId],
@@ -203,6 +229,9 @@ export async function loadCampaignConfig(
     googleSheetTab: (c.google_sheet_tab as string | null) ?? null,
     hubspotIntegrationId: (c.hubspot_integration_id as string | null) ?? null,
     dialAllowlist: (c.dial_allowlist as string[] | null) ?? [],
+    intakeProperty: (c.intake_property as string | null) ?? null,
+    intakeValues: (c.intake_values as string[] | null) ?? [],
+    intakeDefault: Boolean(c.intake_default),
     callingConfig: { ...DEFAULT_CAMPAIGN_CONFIG.callingConfig, ...(c.calling_config as object) },
     routingConfig: { ...DEFAULT_CAMPAIGN_CONFIG.routingConfig, ...(c.routing_config as object) },
     scoringRubric: { ...DEFAULT_CAMPAIGN_CONFIG.scoringRubric, ...(c.scoring_rubric as object) },
@@ -242,6 +271,7 @@ export async function saveCampaignConfig(
         google_sheet_id = $14, google_sheet_tab = $15, hubspot_integration_id = $16,
         calling_config = $17::jsonb, routing_config = $18::jsonb, scoring_rubric = $19::jsonb,
         dial_allowlist = $21,
+        intake_property = $22, intake_values = $23, intake_default = $24,
         config_version = config_version + 1,
         updated_by = $20
       where id = $1 and tenant_id = $2
@@ -268,6 +298,9 @@ export async function saveCampaignConfig(
       JSON.stringify(config.scoringRubric),
       args.userId,
       config.dialAllowlist,
+      config.intakeProperty?.trim() || null,
+      config.intakeValues.map((v) => v.trim()),
+      config.intakeDefault,
     ],
   );
 
@@ -310,8 +343,6 @@ export async function saveCampaignConfig(
  */
 export function activationBlockers(campaign: {
   complianceApprovedAt: Date | string | null;
-  consentBasis: string | null;
-  consentMode?: "require_record" | "inherit_from_source";
   script: string | null;
   questions: number;
   googleSheetId: string | null;
@@ -319,14 +350,11 @@ export function activationBlockers(campaign: {
 }): string[] {
   const blockers: string[] = [];
 
-  // Only a require_record campaign needs a declared basis before it can run.
-  // An inherit_from_source campaign takes consent from the funnel the lead
-  // came through, so there is nothing for a human to type here.
-  if (campaign.consentMode === "require_record" && !campaign.consentBasis) {
-    blockers.push(
-      "This campaign requires an explicit consent record per lead, and no basis is declared for the list",
-    );
-  }
+  // A declared consent basis is not a blocker. Consent is collected in the
+  // funnel before the lead reaches this platform, so `consentBasis` records
+  // what the client asserted about the list - documentation for the audit
+  // trail, not a precondition (migration 0008). What still stops a campaign
+  // is the compliance sign-off below, which is a statement by a named person.
   if (!campaign.complianceApprovedAt) {
     blockers.push("Compliance review has not signed off on outbound calling (PRD 17.3)");
   }

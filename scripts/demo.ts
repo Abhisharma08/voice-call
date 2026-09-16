@@ -18,6 +18,26 @@ import { generateServiceToken } from "../src/lib/auth/service.ts";
 
 const BASE = process.env.APP_URL ?? "http://localhost:3000";
 
+/**
+ * Which campaign to drive, and which conversations to put through it:
+ *
+ *   npm run demo
+ *   npm run demo -- --tenant=alu-empire --campaign="ALU EMPIRE" --pack=aluempire
+ *
+ * The transcript pack matters more than it looks. Qualification is scored
+ * against a campaign's own questions and rubric, so running property
+ * conversations through a windows-and-doors campaign tells you nothing about
+ * whether that campaign is configured well.
+ */
+function arg(name: string): string | undefined {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  return hit?.slice(name.length + 3);
+}
+
+const TENANT_SLUG = arg("tenant") ?? "acme-real-estate";
+const CAMPAIGN_NAME = arg("campaign") ?? "Noida 2BHK";
+const PACK = arg("pack") ?? "property";
+
 const LEADS = [
   { name: "Rahul Sharma", phone: "+919876543210", email: "rahul@example.com", note: "hot" },
   { name: "Priya Nair", phone: "+919876543220", email: "priya@example.com", note: "hot" },
@@ -26,12 +46,15 @@ const LEADS = [
   { name: "Vikram Singh", phone: "+919876543213", email: "vikram@example.com", note: "not interested" },
   { name: "Anita Desai", phone: "+919876543214", email: "anita@example.com", note: "do not call" },
   { name: "Karan Mehta", phone: "+919876543215", email: "karan@example.com", note: "callback" },
+  { name: "Meera Joshi", phone: "+919876543216", email: "meera@example.com", note: "vague enquiry" },
   { name: "Deepa Iyer", phone: "+919876543219", email: "deepa@example.com", note: "provider failure" },
   { name: "No Phone Person", phone: null, email: "nophone@example.com", note: "quarantined" },
 ];
 
+type Transcript = { durationSec: number; text: string };
+
 /** The transcripts the mock provider returns, keyed by scenario digit. */
-const TRANSCRIPTS: Record<string, { durationSec: number; text: string }> = {
+const PROPERTY_TRANSCRIPTS: Record<string, Transcript> = {
   "0": {
     durationSec: 154,
     text: [
@@ -75,6 +98,88 @@ const TRANSCRIPTS: Record<string, { durationSec: number; text: string }> = {
   },
 };
 
+/**
+ * Alu Empire: uPVC and aluminium windows, doors and glass partitions in Delhi
+ * NCR. Written against that campaign's five questions - still_interested,
+ * timeline, budget, location, product_interest - so the rubric and the review
+ * gate are exercised on the answers they will actually see.
+ */
+const ALUEMPIRE_TRANSCRIPTS: Record<string, Transcript> = {
+  "0": {
+    durationSec: 168,
+    text: [
+      "Agent: Namaste, this is an AI assistant calling on behalf of Alu Empire about the quote you requested for windows. Is now a good time?",
+      "Lead: Yes, go ahead.",
+      "Agent: Are you still planning to get the windows done?",
+      "Lead: Yes, definitely. The civil work is finished and we are ready for measurement.",
+      "Agent: When are you looking to start?",
+      "Lead: As soon as possible, within this month ideally.",
+      "Agent: Roughly how many windows are we covering?",
+      "Lead: Twelve windows and two balcony sliding doors.",
+      "Agent: And which area is the site in?",
+      "Lead: Sector 78, Noida.",
+      "Agent: Is it uPVC or aluminium you are considering?",
+      "Lead: uPVC for the bedrooms, and I want to see aluminium options for the balcony.",
+      "Agent: Would you like our technical team to visit and take measurements?",
+      "Lead: Yes, please arrange that. Weekends work better for me.",
+    ].join("\n"),
+  },
+  "3": {
+    durationSec: 26,
+    text: [
+      "Agent: Namaste, calling from Alu Empire about your window enquiry.",
+      "Lead: We already got it done from someone else last month. Not needed now.",
+      "Agent: Understood, thank you for your time.",
+    ].join("\n"),
+  },
+  "4": {
+    durationSec: 15,
+    text: [
+      "Agent: Namaste, calling from Alu Empire about your window enquiry.",
+      "Lead: Stop calling me. Remove my number from your database.",
+      "Agent: I will remove your number right away. Apologies for the disturbance.",
+    ].join("\n"),
+  },
+  "5": {
+    durationSec: 34,
+    text: [
+      "Agent: Namaste, is now a good time to talk about your windows enquiry?",
+      "Lead: I am at work. Call me tomorrow evening after six.",
+      "Agent: Of course, I will arrange a call for tomorrow after six.",
+    ].join("\n"),
+  },
+  // A vague enquiry with nothing decided. Every extractable field is genuinely
+  // unstated, so the model must return nulls and a low confidence rather than
+  // filling gaps - which is the case FR-032 exists for, and the one that
+  // should land in the review queue rather than a client's CRM.
+  "6": {
+    durationSec: 48,
+    text: [
+      "Agent: Namaste, calling from Alu Empire about the quote you requested.",
+      "Lead: Oh, I just filled the form to see prices. Nothing is decided.",
+      "Agent: Are you planning any work soon?",
+      "Lead: Maybe. We are still thinking about whether to renovate at all.",
+      "Agent: Do you know roughly how many windows?",
+      "Lead: No idea honestly, we have not measured anything.",
+      "Agent: Which area is the property in?",
+      "Lead: I would rather not say right now.",
+    ].join("\n"),
+  },
+};
+
+const PACKS: Record<string, Record<string, Transcript>> = {
+  property: PROPERTY_TRANSCRIPTS,
+  aluempire: ALUEMPIRE_TRANSCRIPTS,
+};
+
+const TRANSCRIPTS: Record<string, Transcript> =
+  PACKS[PACK] ??
+  (() => {
+    throw new Error(
+      `Unknown transcript pack "${PACK}". Available: ${Object.keys(PACKS).join(", ")}`,
+    );
+  })();
+
 async function main() {
   if ((process.env.APP_ENV ?? "development") !== "development") {
     throw new Error(`Refusing to run the demo driver with APP_ENV=${process.env.APP_ENV}`);
@@ -93,18 +198,20 @@ async function main() {
     await db.query("begin");
     await db.query(`select set_config('app.global_scope', 'on', true)`);
 
-    const tenant = await db.query<{ id: string }>(
-      `select id from tenants where slug = 'acme-real-estate'`,
-    );
+    const tenant = await db.query<{ id: string }>(`select id from tenants where slug = $1`, [
+      TENANT_SLUG,
+    ]);
     tenantId = tenant.rows[0]?.id ?? "";
-    if (!tenantId) throw new Error("Run `npm run db:reset` first");
+    if (!tenantId) throw new Error(`No tenant with slug "${TENANT_SLUG}". Run \`npm run db:reset\` first`);
 
     const campaign = await db.query<{ id: string; compliance_approved_at: Date | null }>(
-      `select id, compliance_approved_at from campaigns where tenant_id = $1 and name = 'Noida 2BHK'`,
-      [tenantId],
+      `select id, compliance_approved_at from campaigns where tenant_id = $1 and name = $2`,
+      [tenantId, CAMPAIGN_NAME],
     );
     campaignId = campaign.rows[0]?.id ?? "";
-    if (!campaignId) throw new Error("Run `npm run db:reset` first");
+    if (!campaignId) {
+      throw new Error(`Tenant "${TENANT_SLUG}" has no campaign named "${CAMPAIGN_NAME}"`);
+    }
 
     if (!campaign.rows[0]?.compliance_approved_at) {
       throw new Error(
@@ -159,14 +266,20 @@ async function main() {
 
   // ── 2 & 3. Dial, then answer the provider callbacks ──────────────────────
   //
-  // Looped, because that is what n8n does. FR-022 caps concurrent calls per
-  // campaign, so a queue larger than the cap needs several ticks - the first
-  // one here fills the cap, and each subsequent one picks up whatever the
-  // completed callbacks freed.
+  // Looped, because one pass is not enough. FR-022 caps concurrent calls per
+  // campaign, so a queue larger than the cap needs several rounds: each one
+  // dials into whatever headroom the completed callbacks just freed.
+  //
+  // The first calls are usually already in flight before this loop starts -
+  // intake dials on its own webhook invocation now, so posting the leads above
+  // was enough to place them. That is why the loop ends on "nothing dialled
+  // *and* nothing outstanding" rather than on "nothing dialled": treating an
+  // empty tick as the end would leave the calls intake placed unanswered, and
+  // then there would be no transcript to qualify.
   const secret = process.env.VOICE_WEBHOOK_SECRET ?? "dev-webhook-secret";
   const analysable: string[] = [];
 
-  for (let tick = 1; tick <= 4; tick += 1) {
+  for (let round = 1; round <= 6; round += 1) {
     const dial = await post("/api/internal/dial", {
       campaign_id: campaignId,
       worker_id: "demo",
@@ -176,20 +289,22 @@ async function main() {
       dial.body as { dialled: Array<{ callId: string; providerCallId: string | null; status: string }> }
     ).dialled;
 
-    if (dialled.length === 0) break;
-
     const placed = dialled.filter((d) => d.status === "initiated").length;
     const failed = dialled.filter((d) => d.status === "provider_failed").length;
-    console.log(
-      `\n${tick === 1 ? "2" : `2.${tick}`}. Calling worker tick (W02): ` +
-        `${placed} placed${failed > 0 ? `, ${failed} provider failure` : ""}`,
-    );
 
     const calls = await db.query<{ id: string; provider_call_id: string; phone_last4: string }>(
       `select ca.id, ca.provider_call_id, l.phone_last4
          from call_attempts ca join leads l on l.id = ca.lead_id
         where ca.tenant_id = $1 and ca.provider_call_id is not null and ca.status = 'initiated'`,
       [tenantId],
+    );
+
+    if (dialled.length === 0 && calls.rows.length === 0) break;
+
+    console.log(
+      `\n${round === 1 ? "2" : `2.${round}`}. Calling round: ` +
+        `${placed} placed by this tick${failed > 0 ? `, ${failed} provider failure` : ""}, ` +
+        `${calls.rows.length} in flight`,
     );
 
     await answerCallbacks(calls.rows, secret, token, analysable);

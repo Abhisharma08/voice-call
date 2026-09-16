@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { authenticateService, withServiceScope } from "@/lib/auth/service";
 import { drainSyncOutbox } from "@/lib/integrations/sync-worker";
+import { logger } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
 
@@ -23,13 +24,9 @@ export async function POST(request: NextRequest) {
     const result = await withServiceScope(identity, (tx) => drainSyncOutbox(tx, {}, limit));
     return NextResponse.json(result);
   } catch (err) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        msg: "sync drain failed",
-        err: err instanceof Error ? err.message : String(err),
-      }),
-    );
+    logger.error("sync drain failed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
     return NextResponse.json({ error: "Sync drain failed" }, { status: 500 });
   }
 }

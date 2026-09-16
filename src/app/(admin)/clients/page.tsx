@@ -113,7 +113,37 @@ export default async function ClientsPage() {
       {can(user.role, "tenant:write") ? (
         <div style={{ marginTop: 22 }}>
           <h2 style={{ fontSize: 15, margin: "0 0 10px" }}>Onboard a client</h2>
-          <CreateTenantForm />
+
+          {/*
+            Two paths on purpose. The full onboarding creates the campaign, its
+            script and questions, and the credential HubSpot posts with, which
+            is what "add a client" actually means. The bare form below remains
+            for a tenant that is not getting a campaign yet.
+          */}
+          {can(user.role, "campaign:write") ? (
+            <div className="card stack" style={{ maxWidth: 640, marginBottom: 16 }}>
+              <strong>Client, campaign and HubSpot credential in one step</strong>
+              <p style={{ margin: 0, fontSize: 13, color: "var(--muted)" }}>
+                Starts the campaign from a template so it has a script and qualification
+                questions, and shows you the webhook URL and token to paste into the
+                client&apos;s HubSpot.
+              </p>
+              <div className="row">
+                <Link href="/clients/new">
+                  <button type="button">Onboard a client</button>
+                </Link>
+              </div>
+            </div>
+          ) : null}
+
+          <details>
+            <summary style={{ cursor: "pointer", fontSize: 13, color: "var(--muted)" }}>
+              Or create just the client record
+            </summary>
+            <div style={{ marginTop: 12 }}>
+              <CreateTenantForm />
+            </div>
+          </details>
         </div>
       ) : null}
     </>

@@ -1,5 +1,22 @@
 # n8n workflows
 
+> **Not in use.** These are kept for the multi-client case, where per-portal
+> field mappings are better as configuration than as code branches. For a
+> single client the same four jobs are simpler without a workflow engine:
+>
+> | Workflow | Replaced by |
+> | --- | --- |
+> | W01 lead intake | `POST /api/webhooks/hubspot/leads?campaign=<uuid>` — HubSpot posts its own payload straight to the platform |
+> | W02 calling worker | `npm run worker` — a timer |
+> | W03 qualification | nothing; the voice webhook qualifies a completed call inline |
+> | W04 retry/callback | `npm run worker` — the same timer |
+>
+> The reason that substitution is safe is PRD 9's own rule: durable state lives
+> in PostgreSQL, never in execution history. The queue claim is
+> `FOR UPDATE SKIP LOCKED` with a lock expiry and the endpoints are idempotent
+> on their own keys, so the scheduler is disposable — kill it, restart it, or
+> run two by accident and no call is lost or duplicated.
+
 Importable definitions for the four workflows in PRD 9. Import each JSON file
 into n8n, then set the two credentials/variables they expect.
 

@@ -23,6 +23,12 @@ export interface IntakeEvent {
     name?: string | null;
     phone?: string | null;
     email?: string | null;
+    /**
+     * What the lead asked for, as the upstream form captured it. Spoken back
+     * to them for confirmation and given to the model as context; never
+     * parsed for routing.
+     */
+    requirement?: string | null;
   };
   /**
    * Consent as supplied by the client (PRD 26.1). The agency did not run the
@@ -56,12 +62,11 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
           consent_basis: string | null;
           consent_source: string | null;
           consent_evidence_ref: string | null;
-          consent_mode: "require_record" | "inherit_from_source";
           consent_origin: string | null;
         }>(
           `select id, timezone, calling_config,
                   consent_basis, consent_source, consent_evidence_ref,
-                  consent_mode, consent_origin
+                  consent_origin
              from campaigns where id = $1`,
           [event.campaignId],
         )
@@ -100,17 +105,16 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
   //
   //   1. consent that arrived with the event (HubSpot properties, form fields)
   //   2. the basis the Campaign Manager recorded for this list
-  //   3. inference from where the lead came from, on inherit_from_source
-  //      campaigns
+  //   3. inference from where the lead came from
   //
-  // The third is the common path now, and the row it writes says
+  // The third is the common path, and the row it writes says
   // `inherited_upstream` - an honest label. The agency did not run the opt-in
   // funnel and has not independently verified it, and a record that says so is
-  // worth more than one that overstates.
+  // worth more than one that overstates. Every lead gets a row: there is no
+  // path here that leaves consent unrecorded, and none that holds a call back
+  // for the absence of one (migration 0008).
   const { consent, capturedBy } = resolveConsent(event, campaign);
-  if (consent) {
-    await recordConsent(tx, tenantId, leadId, consent, capturedBy);
-  }
+  await recordConsent(tx, tenantId, leadId, consent, capturedBy);
 
   // FR-012: no callable number means quarantine, with the reason recorded and
   // no call placed.
@@ -237,8 +241,8 @@ async function insertLead(
     `insert into leads
        (tenant_id, campaign_id, hubspot_record_id, source,
         name_enc, phone_enc, email_enc, phone_bidx, email_bidx,
-        phone_last4, phone_country, status, correlation_id)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'new', $12)
+        phone_last4, phone_country, status, correlation_id, enquiry_enc)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'new', $12, $13)
      returning id`,
     [
       event.tenantId,
@@ -253,6 +257,7 @@ async function insertLead(
       n.phone.ok ? n.phone.last4 : null,
       n.phone.ok ? n.phone.country ?? null : null,
       event.correlationId ?? null,
+      encryptPiiOrNull(event.contact.requirement),
     ],
   );
 
@@ -278,7 +283,10 @@ async function updateLead(
         phone_bidx        = coalesce($7, phone_bidx),
         email_bidx        = coalesce($8, email_bidx),
         phone_last4       = coalesce($9, phone_last4),
-        phone_country     = coalesce($10, phone_country)
+        phone_country     = coalesce($10, phone_country),
+        -- A re-submitted form is the lead restating what they want, so the
+        -- newer text wins where there is one.
+        enquiry_enc       = coalesce($11, enquiry_enc)
       where id = $1`,
     [
       leadId,
@@ -291,6 +299,7 @@ async function updateLead(
       n.emailBidx,
       n.phone.ok ? n.phone.last4 : null,
       n.phone.ok ? n.phone.country ?? null : null,
+      encryptPiiOrNull(event.contact.requirement),
     ],
   );
   return leadId;
@@ -302,14 +311,13 @@ interface CampaignConsent {
   consent_basis: string | null;
   consent_source: string | null;
   consent_evidence_ref: string | null;
-  consent_mode: "require_record" | "inherit_from_source";
   consent_origin: string | null;
 }
 
 function resolveConsent(
   event: IntakeEvent,
   campaign: CampaignConsent | null,
-): { consent: NonNullable<IntakeEvent["consent"]> | null; capturedBy: ConsentProvenance } {
+): { consent: NonNullable<IntakeEvent["consent"]>; capturedBy: ConsentProvenance } {
   if (event.consent) {
     return { consent: event.consent, capturedBy: "client_supplied" };
   }
@@ -326,22 +334,18 @@ function resolveConsent(
     };
   }
 
-  if (campaign?.consent_mode === "inherit_from_source") {
-    // Nobody typed this in. It names the funnel the lead came through, which
-    // is the most specific true thing available: "meta_lead_form",
-    // "landing_page_form", or whatever the source field carried.
-    return {
-      consent: {
-        basis: "opt_in_form",
-        source: campaign.consent_origin ?? event.source ?? "upstream_form",
-        evidenceRef: event.recordId ? `${event.source}:${event.recordId}` : null,
-        capturedAt: null,
-      },
-      capturedBy: "inherited_upstream",
-    };
-  }
-
-  return { consent: null, capturedBy: "campaign_declaration" };
+  // Nobody typed this in. It names the funnel the lead came through, which is
+  // the most specific true thing available: "meta_lead_form",
+  // "landing_page_form", or whatever the source field carried.
+  return {
+    consent: {
+      basis: "opt_in_form",
+      source: campaign?.consent_origin ?? event.source ?? "upstream_form",
+      evidenceRef: event.recordId ? `${event.source}:${event.recordId}` : null,
+      capturedAt: null,
+    },
+    capturedBy: "inherited_upstream",
+  };
 }
 
 async function recordConsent(

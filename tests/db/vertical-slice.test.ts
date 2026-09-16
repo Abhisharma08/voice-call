@@ -258,18 +258,16 @@ describe("intake (FR-010 to FR-014)", () => {
     expect(reason).toMatch(/missing/);
   });
 
-  it("suppresses a lead with no consent anywhere (PRD 26.1)", async () => {
-    // Phase 2 added a campaign-level consent declaration, and intake mints a
-    // per-lead consents row from it. So "no consent" now means neither the
-    // event nor the campaign carries a basis - which is what this clears.
-    // "No consent anywhere" now means: nothing on the event, nothing declared
-    // on the campaign, and the campaign set to require an explicit record
-    // rather than inherit from the funnel (migration 0006).
+  it("queues a lead with no consent declared anywhere (migration 0008)", async () => {
+    // PRD 26.1 read "a lead may not be queued unless an active consents record
+    // exists", written when this platform was assumed to be where consent
+    // first became known. It is not: the landing page or lead form collects it
+    // and the lead reaches HubSpot before we see it. So nothing on the event
+    // and nothing declared on the campaign is not a lead who declined - it is
+    // a funnel that did not pass the field along, and it holds nothing back.
     await asGlobal(() =>
       owner.query(
-        `update campaigns set consent_basis = null, consent_source = null,
-                consent_mode = 'require_record'
-          where id = $1`,
+        `update campaigns set consent_basis = null, consent_source = null where id = $1`,
         [CAMPAIGN],
       ),
     );
@@ -279,20 +277,26 @@ describe("intake (FR-010 to FR-014)", () => {
         ingestLead(tx, leadEvent("+919876543210", { consent: null })),
       );
 
-      expect(outcome.status).toBe("suppressed");
+      expect(outcome.status).toBe("queued");
 
-      // checkEligibility reports the most serious reason, and an unapproved
-      // campaign outranks a missing consent. The claim under test is that
-      // nothing was minted on the lead's behalf.
-      const consents = await withScope(scope, async (tx) =>
-        (await tx.query(`select 1 from consents where lead_id = $1`, [outcome.leadId])).rowCount,
+      // The row that gets written says where it actually came from. The agency
+      // did not run the opt-in funnel and has not verified it, and a record
+      // saying so is worth more than one that overstates.
+      const consent = await withScope(scope, async (tx) =>
+        (
+          await tx.query<{ basis: string; captured_by: string }>(
+            `select basis, captured_by from consents where lead_id = $1`,
+            [outcome.leadId],
+          )
+        ).rows[0],
       );
-      expect(consents).toBe(0);
+      expect(consent?.captured_by).toBe("inherited_upstream");
+      expect(consent?.basis).toBe("opt_in_form");
     } finally {
       await asGlobal(() =>
         owner.query(
           `update campaigns set consent_basis = 'opt_in_form', consent_source = 'slice_test_list',
-                  consent_mode = 'require_record', compliance_approved_at = now()
+                  compliance_approved_at = now()
             where id = $1`,
           [CAMPAIGN],
         ),

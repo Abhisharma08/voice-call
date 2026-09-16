@@ -362,6 +362,58 @@ export function CampaignEditor({
         ) : null}
       </Section>
 
+      <Section
+        title="Lead routing"
+        hint="Which leads land in this campaign. A HubSpot private app has one webhook URL for the whole portal - the free tier has no workflows to give each campaign its own - so the campaign is read from a contact property."
+      >
+        <Row>
+          <Field label="HubSpot contact property">
+            <input
+              value={config.intakeProperty ?? ""}
+              disabled={readOnly}
+              placeholder="product_interest"
+              onChange={(e) => set("intakeProperty", e.target.value || null)}
+              style={input}
+            />
+          </Field>
+          <Field label="Route to this campaign when it is one of (one per line)">
+            <textarea
+              rows={3}
+              value={config.intakeValues.join("\n")}
+              disabled={readOnly}
+              placeholder={"uPVC windows\naluminium doors"}
+              onChange={(e) =>
+                set(
+                  "intakeValues",
+                  e.target.value
+                    .split("\n")
+                    .map((v) => v.trim())
+                    .filter((v) => v !== ""),
+                )
+              }
+              style={textarea}
+            />
+          </Field>
+        </Row>
+
+        <label className="row" style={{ gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox"
+            checked={config.intakeDefault}
+            disabled={readOnly}
+            onChange={(e) => set("intakeDefault", e.target.checked)}
+          />
+          Send unmatched leads from this client here
+        </label>
+
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+          Values are matched case-insensitively and trimmed. One campaign per client may be the
+          default. With a single active campaign and nothing configured, every lead comes here
+          anyway — a lead that matches nothing and has nowhere to default to is recorded as
+          unrouted rather than called with another campaign&apos;s script.
+        </span>
+      </Section>
+
       <Section title="Analysis" hint="The model that reads transcripts and how hard it thinks.">
         <Row>
           <Field label="Model">

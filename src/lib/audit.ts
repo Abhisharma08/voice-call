@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { withScope, withoutScope } from "@/db/client";
+import { logger } from "@/lib/observability/log";
 
 /**
  * Audit trail (PRD 17.1, 26.2).
@@ -69,14 +70,10 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
     await withScope(scope, (tx) => auditInTx(tx, entry));
   } catch (err) {
     // Never let an audit failure mask the original outcome, but make it loud.
-    console.error(
-      JSON.stringify({
-        level: "error",
-        msg: "audit write failed",
-        action: entry.action,
-        err: err instanceof Error ? err.message : String(err),
-      }),
-    );
+    logger.error("audit write failed", {
+      action: entry.action,
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
@@ -107,13 +104,9 @@ export async function recordUnscopedAudit(entry: AuditEntry): Promise<void> {
       await auditInTx(tx, entry);
     });
   } catch (err) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        msg: "audit write failed",
-        action: entry.action,
-        err: err instanceof Error ? err.message : String(err),
-      }),
-    );
+    logger.error("audit write failed", {
+      action: entry.action,
+      err: err instanceof Error ? err.message : String(err),
+    });
   }
 }

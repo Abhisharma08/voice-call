@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { authenticateService, withServiceScope } from "@/lib/auth/service";
 import { qualifyCall } from "@/lib/qualification/pipeline";
+import { logger } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
 
@@ -30,7 +31,9 @@ export async function POST(request: NextRequest) {
     if (message.includes("Call not found")) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    console.error(JSON.stringify({ level: "error", msg: "analysis failed", err: message }));
+    logger.error("analysis failed", {
+      err: message,
+    });
     return NextResponse.json({ error: "Analysis failed" }, { status: 500 });
   }
 }

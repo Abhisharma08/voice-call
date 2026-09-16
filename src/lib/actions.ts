@@ -4,6 +4,7 @@ import { withGlobalScope, withTenant, TenantAccessError } from "@/lib/auth/tenan
 import { AuthorizationError, can, type Permission } from "@/lib/auth/rbac";
 import type { AuthenticatedUser } from "@/lib/auth/session";
 import { auditInTx } from "@/lib/audit";
+import { logger } from "@/lib/observability/log";
 
 /**
  * The single path every configuration write takes.
@@ -134,6 +135,13 @@ function translate(err: unknown): ActionResult<never> {
   if (message.includes("tenants_slug_key")) {
     return failure("That client identifier is already taken", "slug");
   }
+  if (message.includes("campaigns_single_intake_default_uniq")) {
+    return failure(
+      "Another campaign for this client is already the default for unmatched leads. " +
+        "Clear it there first - two defaults would make routing depend on row order.",
+      "intakeDefault",
+    );
+  }
   if (message.includes("qualification_rules_campaign_field_uniq")) {
     return failure("That field name is already used on this campaign", "fieldName");
   }
@@ -141,6 +149,8 @@ function translate(err: unknown): ActionResult<never> {
     return failure("That record already exists");
   }
 
-  console.error(JSON.stringify({ level: "error", msg: "action failed", err: message }));
+  logger.error("action failed", {
+    err: message,
+  });
   return failure("Something went wrong. The change was not saved.");
 }

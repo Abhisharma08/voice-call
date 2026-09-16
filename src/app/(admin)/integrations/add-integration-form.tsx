@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { addIntegration } from "../clients/actions";
 
 const PLACEHOLDERS: Record<string, string> = {
-  hubspot: '{"accessToken": "pat-na1-..."}',
+  hubspot: '{"accessToken": "pat-na1-...", "clientSecret": "..."}',
   google_sheets: '{"client_email": "...@....iam.gserviceaccount.com", "private_key": "-----BEGIN PRIVATE KEY-----\\n..."}',
   voice_provider: '{"accountSid": "...", "authToken": "..."}',
   notification: '{"webhookUrl": "https://hooks.slack.com/..."}',
@@ -53,7 +53,7 @@ export function AddIntegrationForm({ tenantId }: { tenantId: string }) {
             <option value="hubspot">HubSpot</option>
             <option value="google_sheets">Google Sheets</option>
             <option value="voice_provider">Voice provider</option>
-            <option value="notification">Notification</option>
+            <option value="notification">Notification (Slack)</option>
           </select>
         </div>
         <div style={{ flex: 1, minWidth: 200 }}>

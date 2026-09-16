@@ -48,7 +48,6 @@ export function CompliancePanel({
     evidenceRef: string | null;
     declaredAt: string | null;
     declaredBy: string | null;
-    mode: "require_record" | "inherit_from_source";
     origin: string | null;
   };
   approval: { approvedAt: string | null; approvedBy: string | null };
@@ -58,9 +57,9 @@ export function CompliancePanel({
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [showConsent, setShowConsent] = useState(
-    consent.mode === "require_record" && !consent.basis,
-  );
+  // Naming the consent origin is optional documentation, so the form stays
+  // closed until someone asks for it (migration 0008).
+  const [showConsent, setShowConsent] = useState(false);
   const [attestation, setAttestation] = useState("");
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
@@ -134,9 +133,7 @@ export function CompliancePanel({
         </div>
 
         <div className="row" style={{ gap: 6, marginTop: 6 }}>
-          <span className={`pill ${consent.mode === "inherit_from_source" ? "ok" : "warn"}`}>
-            {consent.mode === "inherit_from_source" ? "inherited from source" : "explicit record required"}
-          </span>
+          <span className="pill ok">inherited from source</span>
         </div>
 
         {consent.basis ? (
@@ -150,16 +147,11 @@ export function CompliancePanel({
                 : ""}
             </span>
           </div>
-        ) : consent.mode === "inherit_from_source" ? (
+        ) : (
           <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
             Consent is collected upstream at the landing page or lead form, and recorded on each lead
             at intake as <code>inherited_upstream</code>. Nothing blocks here. Naming the origin below
             is optional, and only makes the audit trail easier to read later.
-          </p>
-        ) : (
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-            This campaign requires an explicit consent record per lead. Leads arriving without one are
-            suppressed until a basis is declared here.
           </p>
         )}
 

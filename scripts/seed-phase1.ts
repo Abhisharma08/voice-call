@@ -98,8 +98,7 @@ async function main() {
           calling_config = $5::jsonb,
           -- Consent is collected upstream at the landing page or Meta lead
           -- form and reaches HubSpot before this platform sees the lead, so
-          -- intake records it rather than gating on it (migration 0006).
-          consent_mode = 'inherit_from_source',
+          -- intake records it rather than gating on it (migration 0008).
           consent_origin = 'landing_page_form',
           -- Development fixture only. See the note at the top of this file.
           compliance_approved_at = now()
