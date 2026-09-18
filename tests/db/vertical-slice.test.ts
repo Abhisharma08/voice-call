@@ -1016,7 +1016,7 @@ describe("sync outbox (PRD 18.2)", () => {
     expect(appendRow).not.toHaveBeenCalled();
   });
 
-  it("appends a masked phone number to the sheet, never the full one (PRD 26.2)", async () => {
+  it("appends the lead's own data, full phone included, to the sheet", async () => {
     stubAnthropic(() => ({
       ...unknownResult(""),
       intent: "hot",
@@ -1044,8 +1044,51 @@ describe("sync outbox (PRD 18.2)", () => {
     expect(appendRow).toHaveBeenCalled();
     const args = appendRow.mock.calls[0] as unknown as [{ row: Record<string, string> }];
     const row = args[0].row;
-    expect(row.phone).toBe("******3210");
-    expect(JSON.stringify(row)).not.toContain("9876543210");
+
+    // The full number, not "******3210". PRD 26.2 masked this because a sheet
+    // sits outside the platform's access control and audit log - still true,
+    // and now a property of who the spreadsheet is shared with rather than of
+    // this row. Changed deliberately: a call log you cannot call from sent the
+    // operator back into the platform for every lead.
+    expect(row.phone).toBe("+919876543210");
+
+    // The lead's own data travels with the call, so a row describes a lead and
+    // not just a phone call.
+    expect(row.source).toBe("hubspot");
+    expect(row).toHaveProperty("email");
+    expect(row).toHaveProperty("enquiry");
+    expect(row.lead_created).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it("still masks the phone number in a Slack notification", async () => {
+    // The sheet is a destination the operator chose and controls sharing on.
+    // A chat notification is neither, so it keeps the PRD 26.2 masking.
+    stubAnthropic(() => ({
+      ...unknownResult(""),
+      intent: "hot",
+      confidence: 0.95,
+      reason: "Ready",
+      summary: "Actively searching",
+      still_interested: true,
+      timeline: "0-3_months",
+      human_followup: true,
+    }));
+
+    await runToAnalysis("+919876543210");
+
+    const payloads: Array<{ maskedPhone: string | null }> = [];
+    await withScope(scope, (tx) =>
+      drainSyncOutbox(tx, {
+        sheetsFactory: () => ({ appendRow: async () => undefined }) as never,
+        hubspotFactory: () => ({ updateContact: async () => undefined, createTask: async () => undefined }) as never,
+        notifier: async (p) => {
+          payloads.push(p as { maskedPhone: string | null });
+        },
+      }),
+    );
+
+    expect(payloads.length).toBeGreaterThan(0);
+    expect(payloads[0]!.maskedPhone).toBe("******3210");
   });
 
   it("retries a transient failure and dead-letters a permanent one", async () => {

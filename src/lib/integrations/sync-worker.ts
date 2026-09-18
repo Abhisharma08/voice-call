@@ -9,7 +9,11 @@ import {
   type OutboxItem,
 } from "@/lib/integrations/outbox";
 import { HubSpotClient, IntegrationError } from "@/lib/integrations/hubspot";
-import { GoogleSheetsClient, type SheetRow } from "@/lib/integrations/google-sheets";
+import {
+  DEFAULT_SHEET_RANGE,
+  GoogleSheetsClient,
+  type SheetRow,
+} from "@/lib/integrations/google-sheets";
 import { SlackNotifier } from "@/lib/integrations/slack";
 import { auditInTx } from "@/lib/audit";
 import { logger } from "@/lib/observability/log";
@@ -155,6 +159,10 @@ interface SyncContext {
   tenant_name: string;
   name_enc: Buffer | null;
   phone_enc: Buffer | null;
+  email_enc: Buffer | null;
+  enquiry_enc: Buffer | null;
+  lead_source: string | null;
+  lead_created_at: Date | null;
   call_status: string;
   duration_sec: number | null;
   recording_ref: string | null;
@@ -177,7 +185,8 @@ async function loadContext(tx: PoolClient, callId: string): Promise<SyncContext 
   const r = await tx.query<SyncContext>(
     `select ca.id as call_id, ca.lead_id, l.hubspot_record_id, ca.campaign_id,
             c.name as campaign_name, t.name as tenant_name,
-            l.name_enc, l.phone_enc, l.next_call_at,
+            l.name_enc, l.phone_enc, l.email_enc, l.enquiry_enc, l.next_call_at,
+            l.source as lead_source, l.created_at as lead_created_at,
             ca.status as call_status, ca.duration_sec, ca.recording_ref, ca.ended_at,
             an.intent, an.score, an.qualification, an.review_status,
             an.structured_payload, an.callback_requested, an.human_followup, an.do_not_call,
@@ -214,10 +223,18 @@ async function syncSheets(tx: PoolClient, item: OutboxItem, deps: SyncDeps): Pro
     campaign: ctx.campaign_name ?? "",
     lead_id: ctx.lead_id,
     hubspot_record_id: ctx.hubspot_record_id ?? "",
-    // PRD 26.2: the sheet lives outside the platform's access-control layer
-    // once data leaves PostgreSQL, so the full number is never written there.
+    source: ctx.lead_source ?? "",
     name: decryptPiiOrNull(ctx.name_enc) ?? "",
-    phone: maskedPhone(ctx.phone_enc) ?? "",
+    // The full number, at the operator's explicit choice. PRD 26.2 masked it
+    // because a sheet sits outside this platform's access control and audit
+    // log - which is still true, and is now a property of the spreadsheet's
+    // own sharing rather than of this row. A call log nobody can call from
+    // was the greater cost here.
+    phone: decryptPiiOrNull(ctx.phone_enc) ?? "",
+    email: decryptPiiOrNull(ctx.email_enc) ?? "",
+    // What the lead actually asked for, in their words.
+    enquiry: decryptPiiOrNull(ctx.enquiry_enc) ?? "",
+    lead_created: ctx.lead_created_at ? ctx.lead_created_at.toISOString().slice(0, 10) : "",
     call_date: (ctx.ended_at ?? new Date()).toISOString().slice(0, 10),
     duration_sec: String(ctx.duration_sec ?? 0),
     call_status: ctx.call_status,
@@ -242,7 +259,7 @@ async function syncSheets(tx: PoolClient, item: OutboxItem, deps: SyncDeps): Pro
 
   await client.appendRow({
     spreadsheetId: ctx.google_sheet_id,
-    range: ctx.google_sheet_tab ?? "Call Log!A:V",
+    range: ctx.google_sheet_tab ?? DEFAULT_SHEET_RANGE,
     row,
   });
 
