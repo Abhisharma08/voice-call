@@ -34,8 +34,6 @@ export default async function CampaignsPage() {
       domain: string | null;
       active: boolean;
       config_version: number;
-      compliance_approved_at: Date | null;
-      consent_basis: string | null;
       voice_provider: string;
       timezone: string;
       calling_config: { window_start?: string; window_end?: string };
@@ -45,7 +43,7 @@ export default async function CampaignsPage() {
       queued: string;
     }>(
       `select c.id, c.name, c.domain, c.active, c.config_version,
-              c.compliance_approved_at, c.consent_basis, c.voice_provider, c.timezone,
+              c.voice_provider, c.timezone,
               c.calling_config, c.dial_allowlist,
               (select count(*) from qualification_rules q where q.campaign_id = c.id) as questions,
               (select count(*) from leads l where l.campaign_id = c.id)               as leads,
@@ -60,8 +58,7 @@ export default async function CampaignsPage() {
     <>
       <h1 className="page-title">Campaigns</h1>
       <p className="page-sub">
-        Client-specific behaviour is configuration, not code. Each campaign carries its own script,
-        questions, rubric and calling hours.
+        Each campaign carries its own script, questions and calling hours.
       </p>
 
       {campaigns.length === 0 ? (
@@ -69,7 +66,7 @@ export default async function CampaignsPage() {
       ) : (
         <div className="stack">
           {campaigns.map((c) => {
-            const dialable = c.active && c.compliance_approved_at !== null;
+            const dialable = c.active;
             return (
               <div key={c.id} className="card stack" style={{ gap: 8 }}>
                 <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
@@ -77,7 +74,7 @@ export default async function CampaignsPage() {
                     {c.name}
                   </Link>
                   <span className={`pill ${dialable ? "ok" : "warn"}`}>
-                    {dialable ? "dialling" : c.active ? "active, blocked" : "inactive"}
+                    {dialable ? "calling" : "paused"}
                   </span>
                   <div className="spacer" />
                   <span className="pill">v{c.config_version}</span>
@@ -101,17 +98,6 @@ export default async function CampaignsPage() {
                   ) : null}
                 </div>
 
-                {/* Say plainly why a campaign cannot call, rather than showing
-                    an inert toggle and leaving the operator to guess. */}
-                {!c.consent_basis ? (
-                  <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                    No consent basis recorded for this client&rsquo;s lead list (PRD 14.3 step 10).
-                  </div>
-                ) : !c.compliance_approved_at ? (
-                  <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                    Awaiting compliance sign-off before outbound calling (PRD 17.3).
-                  </div>
-                ) : null}
               </div>
             );
           })}

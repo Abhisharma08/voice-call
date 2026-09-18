@@ -16,7 +16,6 @@ export type SuppressionReason =
   | "lead_dnc_flag"
   | "consent_withdrawn"
   | "campaign_inactive"
-  | "campaign_not_compliance_approved"
   | "not_on_dial_allowlist"
   | "tenant_inactive"
   | "max_attempts_reached";
@@ -94,12 +93,10 @@ export async function checkEligibility(
   const campaign = await tx.query<{
     active: boolean;
     service_call_campaign: boolean;
-    compliance_approved_at: Date | null;
     calling_config: { max_attempts?: number };
     dial_allowlist: string[];
   }>(
-    `select active, service_call_campaign, compliance_approved_at,
-            calling_config, dial_allowlist
+    `select active, service_call_campaign, calling_config, dial_allowlist
        from campaigns where id = $1`,
     [campaignId],
   );
@@ -107,17 +104,6 @@ export async function checkEligibility(
   const c = campaign.rows[0];
   if (!c || !c.active) {
     return { eligible: false, reason: "campaign_inactive", detail: "Campaign is not active" };
-  }
-
-  // PRD 17.3: "Do not activate India outbound campaigns until a
-  // telecom/compliance review confirms..." Phase 0 added the column; this is
-  // the check that actually stops a call being placed without it.
-  if (!c.compliance_approved_at) {
-    return {
-      eligible: false,
-      reason: "campaign_not_compliance_approved",
-      detail: "Campaign has not passed compliance review (PRD 17.3)",
-    };
   }
 
   // A trial provider account can only reach numbers verified on it, so an

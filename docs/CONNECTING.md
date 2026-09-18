@@ -12,7 +12,7 @@ Six things plug into this platform, and all six are now configuration.
 | 6. **Voice provider (calls)** | **credentials, then pick it per campaign** | **Yes, for real calls** |
 
 Do them in this order. Each step is verifiable before you move on, and the
-compliance gate at the end refuses to let you skip the one that matters.
+checklist on the campaign page names anything still missing.
 
 ---
 
@@ -59,7 +59,7 @@ Two things behave differently on Gemini, both in `providers/gemini.ts`:
   Per-call cost is less predictable than on Anthropic.
 - **Server-side retention is off.** `store` defaults to true on that API, which
   would retain transcripts — the most sensitive text here (PRD 26.2). The
-  adapter sets `store: false`. Do not change that without a compliance
+  adapter sets `store: false`. Do not change that without a deliberate
   decision.
 
 Both providers validate against the same Zod schema before anything is
@@ -479,9 +479,9 @@ Provider credentials currently come from environment variables, so one Sarvam
 account serves all tenants. Per-tenant provider credentials are a Phase 3 item
 — the `integrations` table already has a `voice_provider` type for it.
 
-### Before you pick one, read PRD 17.3
+### Before you pick one
 
-Provider selection here is a compliance decision, not a technology preference.
+Provider selection here is not only a technology preference.
 Twilio's current India guidance says outbound calls to Indian non-Twilio
 numbers can only originate from non-Indian numbers, and recommends legal
 review [Ref. 7]. TRAI's TCCCPR rules govern registered headers and consent for
@@ -528,21 +528,19 @@ For a list whose provenance is *not* established upstream — a purchased list,
 or a client import with no funnel behind it — this platform has no gate to
 switch on, and never usefully had one: the missing-record check it used to run
 only ever fired on leads the funnel had already collected consent from. Whether
-such a list may be called at all is a decision for the compliance review in
-step 8, where a named person signs off on what the list actually is.
+such a list may be called at all is a judgement about the list, made before it
+reaches this platform. Nothing here will make it for you.
 
-## 8. Before any real call: the compliance gate
+## 8. Before any real call
 
 **Campaigns → your campaign:**
 
-1. **Compliance approval** (PRD 17.3) — Agency Admin only, and it requires
-   writing what was actually reviewed: sender/telemarketer registration,
-   consent evidence, provider arrangement, DNC handling, recording notices,
-   retention. The attestation goes in the audit log.
-2. **Activate** — refuses while any checklist item is open.
-
-This does not substitute for the review itself. The software's job is to refuse
-to dial without it and to keep a record of who said it happened.
+1. Work through anything the checklist still names: an opening script,
+   qualification questions, and a Google Sheet or HubSpot destination.
+2. Keep your own number in the dial allowlist for the first live call — while
+   that list is non-empty every other lead is suppressed before a call is
+   placed.
+3. **Start calling.**
 
 ---
 
@@ -580,7 +578,7 @@ PostgreSQL, it is outside the platform's access-control layer.
 | `Unable to parse range: Call Log!A1:V1` | Was a bug in this platform, fixed. A tab name with a space must be quoted in A1 notation (`'Call Log'!A1:V1`); the client now quotes it, and creates the tab if it does not exist |
 | Integration flips to `error` and stops | PRD 18.2: auth failure disables rather than retrying. Fix the credential, press *Test connection* to re-enable |
 | Call results never arrive | `APP_URL` is stale or the tunnel died |
-| Campaign will not activate | Open items on the compliance checklist |
+| Campaign will not start calling | Open items on the checklist |
 | Leads suppressed as `no_consent` | Gone as of migration 0008. Leads the old gate stranded were re-queued by it; if you still see this, the migration has not been applied |
 | Leads suppressed as `consent_withdrawn` | A `consents` row for that lead is marked withdrawn — an opt-out after the form. Working as intended |
 | Leads suppressed as `not_on_dial_allowlist` | The campaign has a dial allowlist set, for a trial provider account. Clear it to go live |

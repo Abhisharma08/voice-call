@@ -27,11 +27,8 @@ import "./load-env.ts";
  * What it leaves alone: the business context, calling window, Google Sheet and
  * voice provider chosen in the UI, and the tenant record.
  *
- * What it deliberately does NOT do: approve compliance. seed-phase1.ts sets
- * that flag as a development fixture on a fictional tenant. This is a real
- * client and a real number would be dialled, so PRD 17.3's review has to
- * happen and be attested by a named Agency Admin in the UI. `--approve` exists
- * for local testing and logs itself as a fixture; see below.
+ * What it deliberately does NOT do: turn calling on. This is a real client and
+ * a real number would be dialled, so starting is a deliberate click in the UI.
  *
  *   npm run db:seed:aluempire
  */
@@ -73,11 +70,10 @@ const DIAL_ALLOWLIST = [
  * person, so a seeded approval can never be mistaken for one an Agency Admin
  * actually made. The script refuses to run outside development anyway.
  *
- * It does not make the campaign safe to point at a real list. The telecom
- * review PRD 17.3 describes still has to happen before a real number is
- * dialled, and clearing the dial allowlist is what would let that happen.
+ * It does not make the campaign safe to point at a real list: the dial
+ * allowlist is what stands between it and a real number, and clearing that is
+ * a deliberate act.
  */
-const APPROVE = process.argv.includes("--approve");
 
 async function main() {
   if ((process.env.APP_ENV ?? "development") !== "development") {
@@ -115,9 +111,8 @@ async function main() {
       id: string;
       active: boolean;
       voice_provider: string;
-      compliance_approved_at: Date | null;
     }>(
-      `select id, active, voice_provider, compliance_approved_at
+      `select id, active, voice_provider
          from campaigns where tenant_id = $1 and name = $2`,
       [tenantId, CAMPAIGN_NAME],
     );
@@ -253,38 +248,6 @@ async function main() {
       );
     }
 
-    // ── Development approval (--approve) ────────────────────────────────────
-    if (APPROVE) {
-      // The approve action requires a consent basis first (PRD 14.3 step 10),
-      // and that is a statement about where this client's list came from -
-      // Alu Empire's website quote form.
-      await client.query(
-        `update campaigns set
-            consent_basis = coalesce(consent_basis, 'opt_in_form'),
-            consent_source = coalesce(consent_source, 'website_quote_form'),
-            consent_declared_at = coalesce(consent_declared_at, now()),
-            compliance_approved_at = now(),
-            compliance_approved_by = (select id from users where email = 'admin@agency.test')
-          where id = $1`,
-        [campaignId],
-      );
-
-      await client.query(
-        `insert into audit_events (tenant_id, actor_type, actor_label, action, entity_type, entity_id, metadata)
-         values ($1, 'system', 'seed-aluempire.ts', 'campaign.compliance_approved', 'campaign', $2, $3::jsonb)`,
-        [
-          tenantId,
-          campaignId,
-          JSON.stringify({
-            development_fixture: true,
-            attestation:
-              "Development fixture set by seed-aluempire.ts --approve. No telecom or legal " +
-              "review has taken place. Not valid for calling a real lead list (PRD 17.3).",
-          }),
-        ],
-      );
-    }
-
     await client.query("commit");
 
     console.log(`Configured "${CAMPAIGN_NAME}" for ${row.name}.\n`);
@@ -299,13 +262,8 @@ async function main() {
       console.log(`  ! voice_provider is "${c.voice_provider}", not mock. The allowlist above is`);
       console.log(`    the only thing preventing a call to a real number once active.\n`);
     }
-    if (APPROVE) {
-      console.log(`  ! Compliance approved as a DEVELOPMENT fixture, logged as such.`);
-      console.log(`    No telecom or legal review has happened. Before a real number is`);
-      console.log(`    dialled, an Agency Admin has to make that attestation in /campaigns.`);
-    } else if (!c.compliance_approved_at) {
-      console.log(`  ! Not compliance-approved, so it cannot be activated (PRD 17.3).`);
-      console.log(`    Re-run with --approve to satisfy the gate for local testing.`);
+    if (!c.active) {
+      console.log(`  ! Calling is off. Turn it on from the campaign page when ready.`);
     }
   } catch (err) {
     await client.query("rollback").catch(() => {});

@@ -365,16 +365,31 @@ describe("intake (FR-010 to FR-014)", () => {
     if (outcome.status === "suppressed") expect(outcome.reason).toBe("dnc_tenant");
   });
 
-  it("refuses to queue for a campaign that has not passed compliance review (PRD 17.3)", async () => {
-    await asGlobal(() => owner.query(`update campaigns set compliance_approved_at = null where id = $1`, [CAMPAIGN]));
+  it("queues without a compliance approval, which no longer gates calling", async () => {
+    await asGlobal(() =>
+      owner.query(`update campaigns set compliance_approved_at = null where id = $1`, [CAMPAIGN]),
+    );
 
-    const outcome = await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
-    expect(outcome.status).toBe("suppressed");
-    if (outcome.status === "suppressed") {
-      expect(outcome.reason).toBe("campaign_not_compliance_approved");
+    try {
+      const outcome = await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
+      expect(outcome.status).toBe("queued");
+    } finally {
+      await asGlobal(() =>
+        owner.query(`update campaigns set compliance_approved_at = now() where id = $1`, [CAMPAIGN]),
+      );
     }
+  });
 
-    await asGlobal(() => owner.query(`update campaigns set compliance_approved_at = now() where id = $1`, [CAMPAIGN]));
+  it("refuses to queue for a paused campaign", async () => {
+    await asGlobal(() => owner.query(`update campaigns set active = false where id = $1`, [CAMPAIGN]));
+
+    try {
+      const outcome = await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
+      expect(outcome.status).toBe("suppressed");
+      if (outcome.status === "suppressed") expect(outcome.reason).toBe("campaign_inactive");
+    } finally {
+      await asGlobal(() => owner.query(`update campaigns set active = true where id = $1`, [CAMPAIGN]));
+    }
   });
 });
 

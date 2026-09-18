@@ -7,13 +7,11 @@ import { generateServiceToken } from "../src/lib/auth/service.ts";
  * Phase 1 development seed: makes the Acme tenant dialable end-to-end.
  *
  * Adds the qualification questions, a mock voice provider, placeholder
- * integration credentials, and an n8n service token - then marks the campaign
- * compliance-approved so the PRD 17.3 gate lets it run.
+ * integration credentials, and an n8n service token.
  *
- * That approval is a *development* fixture. It exists so `npm run dev` can
- * demonstrate the flow. In staging or production the flag is set by an Agency
- * Admin after an actual telecom/legal review, which is why this script refuses
- * to run outside development.
+ * It is a *development* fixture - it exists so `npm run dev` can demonstrate
+ * the flow on a fictional tenant, which is why it refuses to run outside
+ * development.
  */
 
 async function main() {
@@ -99,9 +97,7 @@ async function main() {
           -- Consent is collected upstream at the landing page or Meta lead
           -- form and reaches HubSpot before this platform sees the lead, so
           -- intake records it rather than gating on it (migration 0008).
-          consent_origin = 'landing_page_form',
-          -- Development fixture only. See the note at the top of this file.
-          compliance_approved_at = now()
+          consent_origin = 'landing_page_form'
         where id = $1`,
       [
         campaignId,
@@ -167,7 +163,6 @@ async function main() {
     console.log("  The mock voice provider picks a scenario from the last digit of the number:");
     console.log("    ...0 hot   ...1 no_answer   ...2 busy   ...3 not_interested");
     console.log("    ...4 do_not_call   ...5 callback   ...9 provider_failure\n");
-    console.log("  Campaign is marked compliance-approved as a DEVELOPMENT fixture (PRD 17.3).");
   } catch (err) {
     await client.query("rollback").catch(() => {});
     throw err;

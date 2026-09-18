@@ -29,12 +29,10 @@ export default async function ClientsPage() {
           queued: string;
           pending_review: string;
           integrations: string;
-          approved_campaigns: string;
         }>(
           `select
              (select count(*) from campaigns)                                      as campaigns,
              (select count(*) from campaigns where active)                         as active_campaigns,
-             (select count(*) from campaigns where compliance_approved_at is not null) as approved_campaigns,
              (select count(*) from leads)                                          as leads,
              (select count(*) from leads where status = 'queued')                  as queued,
              (select count(*) from call_analyses where review_status = 'pending_review') as pending_review,
@@ -63,7 +61,7 @@ export default async function ClientsPage() {
       ) : (
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
           {rows.map(({ tenant, stats }) => {
-            const approved = Number(stats.approved_campaigns);
+            const active = Number(stats.active_campaigns);
             const total = Number(stats.campaigns);
             return (
               <div key={tenant.id} className="card stack" style={{ gap: 10 }}>
@@ -85,10 +83,9 @@ export default async function ClientsPage() {
                   ) : null}
                 </div>
 
-                {/* PRD 17.3: a campaign that has not passed compliance review cannot dial. */}
-                {total > 0 && approved < total ? (
+                {total > 0 && active < total ? (
                   <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                    {total - approved} of {total} campaigns awaiting compliance approval
+                    {total - active} of {total} campaigns not calling yet
                   </div>
                 ) : null}
 

@@ -64,22 +64,19 @@ describe("campaign templates", () => {
   );
 
   it.each(CAMPAIGN_TEMPLATES.map((t) => [t.id, t] as const))(
-    "%s clears the activation blockers a template can clear",
+    "%s leaves only the destination outstanding",
     (_id, template) => {
       const blockers = activationBlockers({
-        complianceApprovedAt: null,
         script: template.script,
         questions: template.questions.length,
-        // Both are credentials someone has to paste in; a template cannot
-        // supply them, and they must still be named as outstanding.
-        googleSheetId: "sheet-id",
-        hubspotIntegrationId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+        // A destination is a credential someone has to paste in; a template
+        // cannot supply one, so it is named as outstanding until they do.
+        googleSheetId: null,
+        hubspotIntegrationId: null,
       });
 
-      // Compliance approval is the one blocker left, and deliberately so:
-      // PRD 17.3 wants a named person's attestation, not a default.
       expect(blockers).toHaveLength(1);
-      expect(blockers[0]).toContain("Compliance");
+      expect(blockers[0]).toMatch(/destination/i);
     },
   );
 

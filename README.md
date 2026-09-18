@@ -74,7 +74,7 @@ prompts/questions/scoring, tenant dashboards and audit logs.
 | Client management | `/clients` — agency-managed credentials, health, activation status |
 | Campaign configuration | `/campaigns/[id]` — script, questions, rubric, thresholds, windows, retries, destinations, models, dial allowlist |
 | Config versioning (PRD 9) | Every save bumps `config_version` and snapshots into `campaign_versions` |
-| Compliance gate (PRD 17.3) | Consent declaration and a named attestation, both required before a campaign can dial — enforced at claim time |
+| Activation checklist | A script, at least one question, and somewhere to write the answers — enforced at claim time |
 | Credentials (PRD 17.1) | `/integrations` — sealed on entry, validated for shape, never read back |
 | Staff & elevations (PRD 8.2) | `/settings` — assignments, time-boxed logged elevations |
 | KPIs (PRD 21) | `/analytics` — operational, AI-performance and commercial metrics kept apart |
@@ -458,9 +458,8 @@ HubSpot has no way to reach it.
 
 What onboarding deliberately cannot do is make the campaign dial. It starts
 inactive, on the `mock` provider, and returns `activationBlockers()` for the
-operator to work through. Compliance approval in particular is a named person's
-attestation (PRD 17.3); a template cannot make a statement about a telecom
-review.
+operator to work through — the destination in particular is a credential
+someone has to paste in, which a template cannot supply.
 
 ---
 
@@ -558,8 +557,7 @@ Three things are easy to get wrong and worth repeating here:
   unconfigured provider fails loudly at claim time rather than dialling through
   something half-set-up. Twilio is telephony only, driving TwiML this app
   serves, and is there for local testing against a phone that actually rings.
-  Neither has been run against a production account or volume, and provider
-  choice is a compliance decision (PRD 17.3).
+  Neither has been run against a production account or volume.
 - **Email notifications** (PRD 16). Slack delivery is built - an incoming
   webhook per client, sealed like any other credential, delivered through the
   sync outbox so an outage is a retry rather than a lost hot lead. Email is
@@ -573,15 +571,18 @@ Three things are easy to get wrong and worth repeating here:
 Navigation entries for the unbuilt surfaces render a placeholder naming the
 phase that fills them.
 
-### The compliance gate is live
+### What stops a campaign from calling
 
-PRD 17.3 requires that India outbound campaigns not activate until a
-telecom/compliance review confirms the agency's own sender/telemarketer
-registration, the consent basis for the client's list, provider arrangement,
-DNC handling, recording notices and retention.
+Only things that would break the call itself: no opening script, no
+qualification questions, or nowhere to write the answers. There is no
+compliance sign-off step — consent is collected upstream in the client's own
+funnel and recorded on each lead at intake, so `activationBlockers()` never
+waits on a human approval.
 
-`campaigns.compliance_approved_at` is null for every seeded campaign, and
-`src/lib/calling/queue.ts` refuses to claim a lead for a campaign that is
-inactive or unapproved — so the column is enforcement, not documentation. The
-attestation is recorded through `/campaigns/[id]` by a named person;
-`activationBlockers()` lists what a campaign is still missing.
+`src/lib/calling/queue.ts` still refuses to claim a lead for a paused campaign,
+and the dial allowlist still suppresses any number not on it, so "calling is
+off" is enforcement rather than a label. The `compliance_approved_at` and
+consent columns remain on `campaigns`, written only by the retained
+`approveCompliance` / `declareConsentBasis` actions, for a client who later
+needs a named attestation on file. Nothing reads them to decide whether to
+dial.

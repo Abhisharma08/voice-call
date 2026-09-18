@@ -525,7 +525,6 @@ export async function onboardClient(
       appWebhookUrl: hubspotAppWebhookUrl(env().APP_URL),
       webhookUrl: hubspotWebhookUrl(env().APP_URL, campaignId),
       blockers: activationBlockers({
-        complianceApprovedAt: null,
         script: template.script,
         questions: template.questions.length,
         googleSheetId: null,

@@ -5,7 +5,7 @@ import { can } from "@/lib/auth/rbac";
 import { loadCampaignConfig, activationBlockers } from "@/lib/campaigns/config";
 import { providerNames } from "@/lib/providers/voice";
 import { CampaignEditor } from "./campaign-editor";
-import { CompliancePanel } from "./compliance-panel";
+import { CallingStatus } from "./calling-status";
 
 export const dynamic = "force-dynamic";
 
@@ -24,27 +24,6 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   const data = await withTenant(user, user.activeTenantId, async (tx) => {
     const config = await loadCampaignConfig(tx, id);
     if (!config) return null;
-
-    const meta = await tx.query<{
-      compliance_approved_at: Date | null;
-      consent_basis: string | null;
-      consent_source: string | null;
-      consent_evidence_ref: string | null;
-      consent_declared_at: Date | null;
-      consent_origin: string | null;
-      declared_by_email: string | null;
-      approved_by_email: string | null;
-    }>(
-      `select c.compliance_approved_at, c.consent_basis, c.consent_source,
-              c.consent_evidence_ref, c.consent_declared_at,
-              c.consent_origin,
-              d.email as declared_by_email, a.email as approved_by_email
-         from campaigns c
-         left join users d on d.id = c.consent_declared_by
-         left join users a on a.id = c.compliance_approved_by
-        where c.id = $1`,
-      [id],
-    );
 
     const integrations = await tx.query<{ id: string; name: string; type: string; status: string }>(
       `select id, name, type, status from integrations where type = 'hubspot' order by name`,
@@ -66,7 +45,6 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
     return {
       config,
-      meta: meta.rows[0]!,
       hubspotIntegrations: integrations.rows,
       versions: versions.rows.map((v) => ({
         version: v.version,
@@ -80,7 +58,6 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   if (!data) notFound();
 
   const blockers = activationBlockers({
-    complianceApprovedAt: data.meta.compliance_approved_at,
     script: data.config.script,
     questions: data.config.questions.length,
     googleSheetId: data.config.googleSheetId,
@@ -95,25 +72,12 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         so a result can always be traced to the script that produced it.
       </p>
 
-      <CompliancePanel
+      <CallingStatus
         tenantId={user.activeTenantId}
         campaignId={id}
         active={data.config.active}
         blockers={blockers}
-        consent={{
-          basis: data.meta.consent_basis,
-          source: data.meta.consent_source,
-          evidenceRef: data.meta.consent_evidence_ref,
-          declaredAt: data.meta.consent_declared_at?.toISOString() ?? null,
-          declaredBy: data.meta.declared_by_email,
-          origin: data.meta.consent_origin,
-        }}
-        approval={{
-          approvedAt: data.meta.compliance_approved_at?.toISOString() ?? null,
-          approvedBy: data.meta.approved_by_email,
-        }}
         canConfigure={can(user.role, "campaign:write")}
-        canApprove={can(user.role, "compliance:approve")}
       />
 
       <CampaignEditor
