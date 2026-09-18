@@ -98,7 +98,7 @@ async function main() {
 
     console.log("Seeded 2 tenants, 4 staff users, 1 campaign.");
     console.log(`Login with any of the *@agency.test emails / password: ${DEV_PASSWORD}`);
-    console.log("Note: no campaign is compliance-approved, so none can be activated (PRD 17.3).");
+    console.log("Note: campaigns start with calling off. Turn it on from /campaigns.");
   } catch (err) {
     await client.query("rollback").catch(() => {});
     throw err;
