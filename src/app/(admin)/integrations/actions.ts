@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { failure, success, tenantAction, type ActionResult } from "@/lib/actions";
-import type { SealedSecret } from "@/lib/crypto/kms";
+import { sealSecret, type SealedSecret } from "@/lib/crypto/kms";
+import { derivePortalId, validateCredentialShape } from "@/lib/integrations/credentials";
 import { HubSpotClient, IntegrationError } from "@/lib/integrations/hubspot";
 import { GoogleSheetsClient, splitRange } from "@/lib/integrations/google-sheets";
 import { SlackNotifier } from "@/lib/integrations/slack";
@@ -24,6 +25,106 @@ import { SlackNotifier } from "@/lib/integrations/slack";
  * Finding either during the first live campaign is expensive. Finding them
  * from a button is not.
  */
+
+const Replace = z.object({
+  tenantId: z.string().uuid(),
+  integrationId: z.string().uuid(),
+  credential: z.string().min(1).max(20000),
+});
+
+/**
+ * Replace an integration's secret in place.
+ *
+ * Adding a second credential is not the same thing and is sometimes worse:
+ * `app.hubspot_portal_lookup` takes `limit 1` with no ordering, so two
+ * integrations for one portal make which credential verifies an inbound
+ * webhook a coin toss. Rotation has to keep the integration row - and the id
+ * every campaign points at - and swap what it references.
+ *
+ * The old secret is deleted once nothing references it. `credential_ref` is
+ * ON DELETE RESTRICT, so the order matters: repoint first, then drop. Keeping
+ * the row would leave an unwrappable copy of a credential that was very likely
+ * rotated because it leaked.
+ */
+export async function replaceIntegrationCredential(
+  formData: FormData,
+): Promise<ActionResult<{ portalId: number | null }>> {
+  const parsed = Replace.safeParse({
+    tenantId: formData.get("tenantId"),
+    integrationId: formData.get("integrationId"),
+    credential: formData.get("credential"),
+  });
+
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return failure(issue?.message ?? "Invalid input", issue?.path.join("."));
+  }
+
+  const { tenantId, integrationId, credential } = parsed.data;
+
+  // The type is the integration's, never the caller's: a credential shape is
+  // only meaningful against what the far end actually is.
+  const existing = await tenantAction({ tenantId, permission: "secret:write" }, async (ctx) => {
+    const r = await ctx.tx.query<{ type: string; credential_ref: string | null }>(
+      `select type, credential_ref from integrations where id = $1 and tenant_id = $2`,
+      [integrationId, tenantId],
+    );
+    const row = r.rows[0];
+    return row ? success(row) : failure("Not found");
+  });
+
+  if (!existing.ok) return existing;
+  const { type, credential_ref: previousSecretId } = existing.data;
+
+  const shapeError = validateCredentialShape(type, credential);
+  if (shapeError) return failure(shapeError, "credential");
+
+  // Outside the transaction, for the reason addIntegration derives it there.
+  const portalId = type === "hubspot" ? await derivePortalId(credential) : null;
+
+  return tenantAction({ tenantId, permission: "secret:write" }, async (ctx) => {
+    const sealed = sealSecret(credential, type);
+
+    const secret = await ctx.tx.query<{ id: string }>(
+      `insert into secrets (tenant_id, purpose, key_id, wrapped_dek, iv, ciphertext, auth_tag, created_by)
+       values ($1, $2, $3, $4, $5, $6, $7, $8) returning id`,
+      [tenantId, type, sealed.keyId, sealed.wrappedDek, sealed.iv, sealed.ciphertext, sealed.authTag, ctx.user.id],
+    );
+
+    // A rotation clears the previous failure and the previous verification:
+    // both described the credential that just went away.
+    await ctx.tx.query(
+      `update integrations
+          set credential_ref = $3,
+              status = 'active',
+              last_error = null,
+              last_verified_at = null,
+              hubspot_portal_id = coalesce($4, hubspot_portal_id),
+              updated_at = now()
+        where id = $1 and tenant_id = $2`,
+      [integrationId, tenantId, secret.rows[0]!.id, portalId],
+    );
+
+    if (previousSecretId) {
+      await ctx.tx.query(`delete from secrets where id = $1 and tenant_id = $2`, [
+        previousSecretId,
+        tenantId,
+      ]);
+    }
+
+    await ctx.audit({
+      action: "integration.credential_replaced",
+      entityType: "integration",
+      entityId: integrationId,
+      // The credential itself never reaches the audit log.
+      metadata: { type, hubspot_portal_id: portalId },
+    });
+
+    revalidatePath("/integrations");
+    revalidatePath("/clients");
+    return success({ portalId });
+  });
+}
 
 const Test = z.object({
   tenantId: z.string().uuid(),

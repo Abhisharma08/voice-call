@@ -4,6 +4,7 @@ import { can } from "@/lib/auth/rbac";
 import { providerDiagnostics } from "@/lib/providers/voice";
 import { AddIntegrationForm } from "./add-integration-form";
 import { TestConnection } from "./test-connection";
+import { ReplaceCredential } from "./replace-credential";
 import { DeadLetters, type DeadLetter } from "./dead-letters";
 
 export const dynamic = "force-dynamic";
@@ -188,12 +189,15 @@ export default async function IntegrationsPage() {
               ) : null}
 
               {can(user.role, "integration:write") ? (
-                <TestConnection
-                  tenantId={tenantId}
-                  integrationId={i.id}
-                  spreadsheetId={spreadsheetId}
-                  sheetRange={sheetRange}
-                />
+                <>
+                  <TestConnection
+                    tenantId={tenantId}
+                    integrationId={i.id}
+                    spreadsheetId={spreadsheetId}
+                    sheetRange={sheetRange}
+                  />
+                  <ReplaceCredential tenantId={tenantId} integrationId={i.id} type={i.type} />
+                </>
               ) : null}
             </div>
           ))}
