@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_SHEET_CELLS,
   GoogleSheetsClient,
   SHEET_COLUMNS,
   formatRange,
@@ -137,6 +138,8 @@ describe("appendRow request shape", () => {
     const client = new GoogleSheetsClient(credentials, stubFetch(urls));
 
     await client.appendRow({ spreadsheetId: "sheet-1", range: "Sheet1", row: row as never });
-    expect(urls[0]).toContain("Sheet1!A:V:append");
+    // Derived from SHEET_COLUMNS rather than written out, so adding a column
+    // cannot leave this asserting a range that truncates every append.
+    expect(urls[0]).toContain(`Sheet1!${DEFAULT_SHEET_CELLS}:append`);
   });
 });

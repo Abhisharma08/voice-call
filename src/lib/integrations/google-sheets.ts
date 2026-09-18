@@ -23,15 +23,26 @@ export interface ServiceAccountCredentials {
   private_key: string;
 }
 
-/** PRD 15's Call Log column order. Positional - do not reorder. */
+/**
+ * PRD 15's Call Log column order. Positional - do not reorder.
+ *
+ * `source`, `email`, `enquiry` and `lead_created` are the lead's own data
+ * rather than the call's: who they are, what they actually asked for, and when
+ * they arrived. A row without them describes a phone call but not a lead, so
+ * acting on one meant opening the platform to find out what the enquiry was.
+ */
 export const SHEET_COLUMNS = [
   "call_id",
   "client_id",
   "campaign",
   "lead_id",
   "hubspot_record_id",
+  "source",
   "name",
   "phone",
+  "email",
+  "enquiry",
+  "lead_created",
   "call_date",
   "duration_sec",
   "call_status",
@@ -50,6 +61,16 @@ export const SHEET_COLUMNS = [
 ] as const;
 
 export type SheetRow = Record<(typeof SHEET_COLUMNS)[number], string>;
+
+/**
+ * The cell range a full row occupies, derived rather than written down.
+ *
+ * It was "A:V" in four files. Adding a column then meant finding all four, and
+ * missing one truncates every append silently - Sheets accepts a row wider
+ * than the range and drops the overflow.
+ */
+export const DEFAULT_SHEET_CELLS = `A:${columnLetter(SHEET_COLUMNS.length)}`;
+export const DEFAULT_SHEET_RANGE = `Call Log!${DEFAULT_SHEET_CELLS}`;
 
 export function toRowValues(row: SheetRow): string[] {
   return SHEET_COLUMNS.map((c) => row[c] ?? "");
@@ -72,9 +93,9 @@ export class GoogleSheetsClient {
     const token = await this.accessToken();
 
     // Re-quote rather than trusting the stored range: a tab name with a space
-    // saved as `Call Log!A:V` is unparseable to the API.
+    // saved as `Call Log!A:Z` is unparseable to the API.
     const { tab, cells } = splitRange(args.range);
-    const range = formatRange(tab, cells ?? "A:V");
+    const range = formatRange(tab, cells ?? DEFAULT_SHEET_CELLS);
 
     const url =
       `${SHEETS_BASE}/${encodeURIComponent(args.spreadsheetId)}/values/` +
@@ -297,7 +318,7 @@ function base64url(value: string): string {
 }
 
 /**
- * Split "Call Log!A:V" into its tab and cell parts. A range with no "!" is
+ * Split "Call Log!A:Z" into its tab and cell parts. A range with no "!" is
  * treated as a bare tab name.
  */
 export function splitRange(range: string): { tab: string; cells: string | null } {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_SHEET_RANGE } from "@/lib/integrations/google-sheets";
 import type { PoolClient } from "pg";
 
 /**
@@ -154,7 +155,7 @@ export const DEFAULT_CAMPAIGN_CONFIG: Omit<CampaignConfig, "name"> = {
   reviewConfidenceThreshold: 0.75,
   reviewBoundaryBand: 5,
   googleSheetId: null,
-  googleSheetTab: "Call Log!A:V",
+  googleSheetTab: DEFAULT_SHEET_RANGE,
   hubspotIntegrationId: null,
   dialAllowlist: [],
   intakeProperty: null,

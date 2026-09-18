@@ -255,7 +255,7 @@ downloaded JSON.
 **Campaigns → your campaign → Destinations**:
 
 - **Google Sheet ID** — from the URL: `docs.google.com/spreadsheets/d/<THIS>/edit`
-- **Sheet range** — `Call Log!A:V`
+- **Sheet range** — `Call Log!A:Z`
 
 Then press **Test connection** on the Sheets integration. It confirms access,
 **creates the tab if it does not exist** (a new spreadsheet only has `Sheet1`),

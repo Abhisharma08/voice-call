@@ -6,7 +6,11 @@ import { failure, success, tenantAction, type ActionResult } from "@/lib/actions
 import { sealSecret, type SealedSecret } from "@/lib/crypto/kms";
 import { derivePortalId, validateCredentialShape } from "@/lib/integrations/credentials";
 import { HubSpotClient, IntegrationError } from "@/lib/integrations/hubspot";
-import { GoogleSheetsClient, splitRange } from "@/lib/integrations/google-sheets";
+import {
+  DEFAULT_SHEET_RANGE,
+  GoogleSheetsClient,
+  splitRange,
+} from "@/lib/integrations/google-sheets";
 import { SlackNotifier } from "@/lib/integrations/slack";
 
 /**
@@ -299,7 +303,7 @@ async function testSheets(
 
   // Use the campaign's configured range. Testing a hardcoded one proves
   // nothing about the destination the sync will actually write to.
-  const range = sheetRange ?? "Call Log!A:V";
+  const range = sheetRange ?? DEFAULT_SHEET_RANGE;
   const { tab } = splitRange(range);
 
   const info = await client.verifyConnection(spreadsheetId);
