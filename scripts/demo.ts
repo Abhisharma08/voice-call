@@ -204,19 +204,13 @@ async function main() {
     tenantId = tenant.rows[0]?.id ?? "";
     if (!tenantId) throw new Error(`No tenant with slug "${TENANT_SLUG}". Run \`npm run db:reset\` first`);
 
-    const campaign = await db.query<{ id: string; compliance_approved_at: Date | null }>(
-      `select id, compliance_approved_at from campaigns where tenant_id = $1 and name = $2`,
+    const campaign = await db.query<{ id: string }>(
+      `select id from campaigns where tenant_id = $1 and name = $2`,
       [tenantId, CAMPAIGN_NAME],
     );
     campaignId = campaign.rows[0]?.id ?? "";
     if (!campaignId) {
       throw new Error(`Tenant "${TENANT_SLUG}" has no campaign named "${CAMPAIGN_NAME}"`);
-    }
-
-    if (!campaign.rows[0]?.compliance_approved_at) {
-      throw new Error(
-        "The demo campaign has not passed the compliance gate. Run `npm run db:reset`, or approve it in the UI.",
-      );
     }
 
     // Mint a fresh token rather than reusing the seed's - only its hash is

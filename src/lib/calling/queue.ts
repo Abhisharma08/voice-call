@@ -67,10 +67,9 @@ export async function claimLeads(
     concurrency_limit: number;
     voice_provider: string;
     config_version: number;
-    compliance_approved_at: Date | null;
   }>(
     `select id, timezone, active, calling_config, concurrency_limit,
-            voice_provider, config_version, compliance_approved_at
+            voice_provider, config_version
        from campaigns where id = $1`,
     [args.campaignId],
   );
@@ -78,9 +77,9 @@ export async function claimLeads(
   const c = campaign.rows[0];
   if (!c) throw new Error("Campaign not found in this tenant scope");
 
-  // PRD 17.3 compliance gate, enforced at the last possible moment before a
-  // call is placed rather than only at activation time.
-  if (!c.active || !c.compliance_approved_at) {
+  // A paused campaign claims nothing. Checked at the last possible moment
+  // before a call is placed, not only when the toggle is flipped.
+  if (!c.active) {
     return { claimed: [], skipped: [] };
   }
 

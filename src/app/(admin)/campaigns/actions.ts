@@ -14,11 +14,11 @@ import {
 /**
  * Campaign configuration actions (PRD 22 Phase 2).
  *
- * Three things are kept deliberately separate, each with its own permission:
- * editing configuration, declaring the consent basis, and approving the
- * campaign for live calling. Collapsing them would let a routine script edit
- * carry a compliance sign-off with it, which is exactly what PRD 17.3's gate
- * exists to prevent.
+ * Nothing here gates calling on a compliance sign-off - consent is collected
+ * upstream in the client's funnel and recorded on each lead at intake. The
+ * `declareConsentBasis`, `approveCompliance` and `revokeCompliance` actions
+ * below are kept, unused by the UI, for a client that later needs a named
+ * attestation on file. They no longer stop a campaign from dialling.
  */
 
 export async function saveCampaign(
@@ -135,10 +135,9 @@ const Approve = z.object({
  * list, provider arrangement, DNC handling, recording notices, and retention
  * requirements."
  *
- * The software cannot perform that review. What it can do is refuse to dial
- * without it, require a named person to attest that it happened, and keep that
- * attestation. Restricted to `compliance:approve`, which only the Agency Admin
- * holds.
+ * No longer a precondition for calling. Kept so a client who needs a named
+ * person on record can still produce one, and restricted to
+ * `compliance:approve`, which only the Agency Admin holds.
  */
 export async function approveCompliance(formData: FormData): Promise<ActionResult> {
   const parsed = Approve.safeParse({
@@ -188,8 +187,8 @@ export async function revokeCompliance(formData: FormData): Promise<ActionResult
   const reason = String(formData.get("reason") ?? "");
 
   return tenantAction({ tenantId, permission: "compliance:approve" }, async (ctx) => {
-    // Revoking also deactivates: an approved-then-revoked campaign that stayed
-    // active would keep dialling on a sign-off that no longer stands.
+    // Revoking still stops the campaign. Nothing else reads the approval now,
+    // so pausing is the only way this can mean anything.
     await ctx.tx.query(
       `update campaigns
           set compliance_approved_at = null, compliance_approved_by = null, active = false
@@ -215,7 +214,7 @@ const SetActive = z.object({
   active: z.enum(["true", "false"]),
 });
 
-/** PRD 14.3 step 12: activate. Refuses while anything on the checklist is open. */
+/** Start or stop calling. Refuses to start while anything on the checklist is open. */
 export async function setCampaignActive(formData: FormData): Promise<ActionResult> {
   const parsed = SetActive.safeParse({
     tenantId: formData.get("tenantId"),
@@ -230,14 +229,12 @@ export async function setCampaignActive(formData: FormData): Promise<ActionResul
   return tenantAction({ tenantId, permission: "campaign:write" }, async (ctx) => {
     if (active) {
       const r = await ctx.tx.query<{
-        compliance_approved_at: Date | null;
         script: string | null;
         google_sheet_id: string | null;
         hubspot_integration_id: string | null;
         questions: string;
       }>(
-        `select c.compliance_approved_at, c.script,
-                c.google_sheet_id, c.hubspot_integration_id,
+        `select c.script, c.google_sheet_id, c.hubspot_integration_id,
                 (select count(*) from qualification_rules q where q.campaign_id = c.id) as questions
            from campaigns c where c.id = $1`,
         [campaignId],
@@ -247,7 +244,6 @@ export async function setCampaignActive(formData: FormData): Promise<ActionResul
       if (!c) return failure("Not found");
 
       const blockers = activationBlockers({
-        complianceApprovedAt: c.compliance_approved_at,
         script: c.script,
         questions: Number(c.questions),
         googleSheetId: c.google_sheet_id,

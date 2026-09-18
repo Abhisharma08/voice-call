@@ -260,8 +260,8 @@ describe("saving configuration", () => {
   });
 });
 
-describe("compliance gate (PRD 17.3, 14.3 step 10)", () => {
-  it("approves without a declared consent basis, now that consent is inherited", async () => {
+describe("activation checklist", () => {
+  it("still records an approval when one is written, though nothing reads it", async () => {
     // Migration 0006 dropped the precondition. Consent is collected upstream
     // at the form, so a declared basis here was standing in for something the
     // funnel already answers. The attestation below is the check that matters.
@@ -305,24 +305,39 @@ describe("compliance gate (PRD 17.3, 14.3 step 10)", () => {
     expect(r?.compliance_approved_at).not.toBeNull();
   });
 
-  it("never blocks a campaign on a missing consent basis", () => {
+  it("blocks only on what would break a call, never on consent or sign-off", () => {
     const blockers = activationBlockers({
-      complianceApprovedAt: null,
       script: "",
       questions: 0,
       googleSheetId: null,
       hubspotIntegrationId: null,
     });
-    // Compliance sign-off, script, questions, sheet, HubSpot - and nothing
-    // about consent, which the funnel collects upstream (migration 0008).
-    expect(blockers).toHaveLength(5);
-    expect(blockers.join(" ")).not.toMatch(/consent/i);
+    // Script, questions, a destination - and nothing about consent or a
+    // compliance approval, neither of which gates calling any more.
+    expect(blockers).toHaveLength(3);
+    expect(blockers.join(" ")).not.toMatch(/consent|compliance/i);
+  });
+
+  it("accepts either destination on its own", () => {
+    const sheetOnly = activationBlockers({
+      script: "Hello",
+      questions: 1,
+      googleSheetId: "sheet-1",
+      hubspotIntegrationId: null,
+    });
+    const hubspotOnly = activationBlockers({
+      script: "Hello",
+      questions: 1,
+      googleSheetId: null,
+      hubspotIntegrationId: "00000000-0000-4000-8000-00000000cccc",
+    });
+    expect(sheetOnly).toHaveLength(0);
+    expect(hubspotOnly).toHaveLength(0);
   });
 
   it("reports no blockers for a fully configured campaign", () => {
     expect(
       activationBlockers({
-        complianceApprovedAt: new Date(),
         script: "Hello",
         questions: 2,
         googleSheetId: "sheet-1",

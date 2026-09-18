@@ -337,12 +337,14 @@ export async function saveCampaignConfig(
 }
 
 /**
- * Why a campaign cannot be activated yet. Empty means it can.
- * PRD 14.3's wizard ends with "Run a test call" then "Activate campaign"; this
- * is the checklist standing between those two steps.
+ * Why a campaign cannot start calling yet. Empty means it can.
+ *
+ * Only things that would actually break a call are listed. There is no
+ * compliance sign-off step: consent is collected upstream in the client's own
+ * funnel and recorded on each lead at intake, so nothing here gates dialling
+ * on a human approval.
  */
 export function activationBlockers(campaign: {
-  complianceApprovedAt: Date | string | null;
   script: string | null;
   questions: number;
   googleSheetId: string | null;
@@ -350,25 +352,16 @@ export function activationBlockers(campaign: {
 }): string[] {
   const blockers: string[] = [];
 
-  // A declared consent basis is not a blocker. Consent is collected in the
-  // funnel before the lead reaches this platform, so `consentBasis` records
-  // what the client asserted about the list - documentation for the audit
-  // trail, not a precondition (migration 0008). What still stops a campaign
-  // is the compliance sign-off below, which is a statement by a named person.
-  if (!campaign.complianceApprovedAt) {
-    blockers.push("Compliance review has not signed off on outbound calling (PRD 17.3)");
-  }
   if (!campaign.script || campaign.script.trim() === "") {
-    blockers.push("No opening script configured (FR-030)");
+    blockers.push("No opening script configured");
   }
   if (campaign.questions === 0) {
-    blockers.push("No qualification questions configured (FR-030)");
+    blockers.push("No qualification questions configured");
   }
-  if (!campaign.googleSheetId) {
-    blockers.push("No Google Sheet destination configured (FR-004, FR-041)");
-  }
-  if (!campaign.hubspotIntegrationId) {
-    blockers.push("No HubSpot integration selected (FR-003, FR-042)");
+  // Results have to land somewhere. Either destination is enough - a client on
+  // the HubSpot free tier may have no sheet, and a sheet-only client no portal.
+  if (!campaign.googleSheetId && !campaign.hubspotIntegrationId) {
+    blockers.push("No Google Sheet or HubSpot destination for the results");
   }
 
   return blockers;

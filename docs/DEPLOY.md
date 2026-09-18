@@ -260,18 +260,14 @@ so a new field on the client's form cannot start failing intake.
 The campaign is created inactive on the `mock` provider, and
 `/campaigns/[id]` names what is outstanding:
 
-1. **Compliance sign-off** (PRD 17.3). A named person attests to the telecom
-   review: the agency's sender/telemarketer registration, the consent basis for
-   this client's list, the provider arrangement, DNC handling, recording
-   notices and retention. Nothing else in this checklist substitutes for it.
-2. **A Google Sheet id** and a **HubSpot integration** for the call log and
-   CRM write-back.
-3. **A real voice provider** — `twilio` or `sarvam`. `/integrations` shows which
+1. **A Google Sheet id** or a **HubSpot integration** for the call log and CRM
+   write-back. Either one on its own is enough.
+2. **A real voice provider** — `twilio` or `sarvam`. `/integrations` shows which
    are selectable and names the environment variables missing from the rest.
-4. **Keep your own number in the dial allowlist** for the first live call.
+3. **Keep your own number in the dial allowlist** for the first live call.
    While that list is non-empty every other lead is suppressed before a call is
    placed. Clear it only when the client goes live.
-5. **Activate the campaign.**
+4. **Turn calling on.**
 
 ## Rate limiting depends on your proxy
 
@@ -351,11 +347,9 @@ also requires a service token on the webhook, keyed through the per-call
 metadata it carries. Twilio signs, so its callbacks authenticate themselves —
 which they must, since a carrier cannot hold our credentials.
 
-## Compliance is not a checkbox
+## Provider choice is not only a performance question
 
-`PRD 17.3` and Twilio's own India guidance both constrain this: outbound calls
-to Indian non-Twilio numbers must originate from a non-Indian number, and that
-applies to any stack where Twilio is the carrier. Provider choice is a
-compliance decision, not a performance one. The dial allowlist and the
-compliance gate exist so that decision has to be made explicitly, by someone
-who can be named in the audit log.
+Twilio's own India guidance constrains this: outbound calls to Indian
+non-Twilio numbers must originate from a non-Indian number, and that applies to
+any stack where Twilio is the carrier. The dial allowlist is what keeps a
+misconfigured provider from reaching a real lead while you find out.

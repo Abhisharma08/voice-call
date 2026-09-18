@@ -13,8 +13,8 @@ import { DEFAULT_CAMPAIGN_CONFIG } from "@/lib/campaigns/config";
  * in `/campaigns/[id]` afterwards, and two things are deliberately *not*
  * included:
  *
- *   - compliance approval. PRD 17.3 requires a named person to attest to the
- *     telecom review; a template cannot make that statement.
+ *   - a destination for the results. A sheet id or a HubSpot integration is a
+ *     credential someone has to paste in.
  *   - a voice provider that places real calls. Every template starts on
  *     `mock`, so a new client cannot dial anyone before someone has chosen to
  *     let it.

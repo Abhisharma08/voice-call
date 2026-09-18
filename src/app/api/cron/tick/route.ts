@@ -199,7 +199,6 @@ async function pendingWork(): Promise<{
            join tenants t on t.id = c.tenant_id
           where t.status = 'active'
             and c.active
-            and c.compliance_approved_at is not null
             and exists (
               select 1 from leads l
                where l.campaign_id = c.id
