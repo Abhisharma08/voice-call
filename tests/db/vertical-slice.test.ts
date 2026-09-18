@@ -411,8 +411,13 @@ describe("calling worker (FR-020 to FR-025)", () => {
 
     const call = await withScope(scope, async (tx) =>
       (
-        await tx.query<{ status: string; consent_basis: string; attempt_no: number }>(
-          `select status, consent_basis, attempt_no from call_attempts`,
+        await tx.query<{
+          status: string;
+          consent_basis: string;
+          attempt_no: number;
+          queue_latency_sec: number | null;
+        }>(
+          `select status, consent_basis, attempt_no, queue_latency_sec from call_attempts`,
         )
       ).rows[0],
     );
@@ -420,6 +425,12 @@ describe("calling worker (FR-020 to FR-025)", () => {
     // PRD 26.1: the consent basis is stamped at call time.
     expect(call?.consent_basis).toBe("opt_in_form");
     expect(call?.attempt_no).toBe(1);
+
+    // PRD 21's lead-to-call latency, stamped at dial time so the analytics
+    // page never has to join every attempt back to its lead (migration 0013).
+    expect(call?.queue_latency_sec).not.toBeNull();
+    expect(call!.queue_latency_sec!).toBeGreaterThanOrEqual(0);
+    expect(call!.queue_latency_sec!).toBeLessThan(60);
   });
 
   it("does not dial twice for the same lead in one tick", async () => {

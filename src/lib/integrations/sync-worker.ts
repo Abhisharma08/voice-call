@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { withScope } from "@/db/client";
 import { decryptPiiOrNull, maskPhone } from "@/lib/crypto/pii";
 import type { SealedSecret } from "@/lib/crypto/kms";
 import {
@@ -48,6 +49,41 @@ export interface DrainResult {
   succeeded: number;
   failed: number;
   skipped: number;
+}
+
+/**
+ * Drain one tenant's outbox now, in its own scope, without letting a failure
+ * reach the caller.
+ *
+ * The scheduled sweep drains the outbox once a minute, which is a fine floor
+ * but a poor ceiling: a call that ends at 10:00:01 had its result sitting in
+ * `sync_outbox` until 10:01:00 before it reached the client's Google Sheet.
+ * The row is already committed by the time this runs, so calling it from
+ * `after()` on the voice webhook just moves the delivery forward - it is not
+ * the only path, and the cron pass still picks up anything this misses.
+ *
+ * Errors are logged and swallowed for exactly that reason. A HubSpot outage
+ * must not turn into a failed response to a provider callback whose real work
+ * - recording the call - has already committed.
+ */
+export async function flushTenantOutbox(
+  tenantId: string,
+  deps: SyncDeps = {},
+  limit = 25,
+): Promise<DrainResult> {
+  try {
+    return await withScope(
+      { tenantId, globalScope: false, actorId: null, actorType: "service" },
+      (tx) => drainSyncOutbox(tx, deps, limit),
+      "service",
+    );
+  } catch (err) {
+    logger.error("immediate outbox flush failed; the scheduled sweep will retry", {
+      tenant_id: tenantId,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return { processed: 0, succeeded: 0, failed: 0, skipped: 0 };
+  }
 }
 
 export async function drainSyncOutbox(

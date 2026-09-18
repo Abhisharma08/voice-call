@@ -116,11 +116,17 @@ async function dialOne(
   // Durable record first (PRD G4), so a provider timeout cannot lose the fact
   // that we attempted this lead.
   const inserted = await tx.query<{ id: string }>(
+    // queue_latency_sec is the PRD 21 lead-to-call metric, computed here
+    // rather than by joining every first attempt back to its lead when the
+    // analytics page is opened (migration 0013). The value is known now and
+    // never changes, so it is written once and read cheaply forever.
     `insert into call_attempts
        (tenant_id, lead_id, campaign_id, attempt_no, provider, status,
         started_at, consent_id, consent_basis, campaign_config_version,
-        workflow_version, correlation_id)
-     values ($1, $2, $3, $4, $5, 'initiated', now(), $6, $7, $8, $9, $10)
+        workflow_version, correlation_id, queue_latency_sec)
+     select $1, $2, $3, $4, $5, 'initiated', now(), $6, $7, $8, $9, $10,
+            greatest(0, extract(epoch from now() - l.queued_at))::int
+       from leads l where l.id = $2
      returning id`,
     [
       lead.tenantId,

@@ -1,9 +1,10 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth/current-user";
 import { withTenant, TenantAccessError } from "@/lib/auth/tenant";
 import { can } from "@/lib/auth/rbac";
 import { resolveReview } from "@/lib/qualification/resolve";
+import { flushTenantOutbox } from "@/lib/integrations/sync-worker";
 import { logger } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
@@ -45,6 +46,15 @@ export async function POST(request: NextRequest) {
         note: body.note ?? null,
       }),
     );
+
+    // Confirming a held result is what enqueues its Sheets append and HubSpot
+    // update, so the same wait applies here as on the call path: without this
+    // the operator clicks "confirm" and the row appears in the client's sheet
+    // up to a minute later. A rejection enqueues nothing and needs no flush.
+    if (result.reviewStatus !== "rejected") {
+      after(() => flushTenantOutbox(body.tenant_id));
+    }
+
     return NextResponse.json(result);
   } catch (err) {
     if (err instanceof TenantAccessError) {

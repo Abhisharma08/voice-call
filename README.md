@@ -77,7 +77,7 @@ prompts/questions/scoring, tenant dashboards and audit logs.
 | Activation checklist | A script, at least one question, and somewhere to write the answers — enforced at claim time |
 | Credentials (PRD 17.1) | `/integrations` — sealed on entry, validated for shape, never read back |
 | Staff & elevations (PRD 8.2) | `/settings` — assignments, time-boxed logged elevations |
-| KPIs (PRD 21) | `/analytics` — operational, AI-performance and commercial metrics kept apart |
+| KPIs (PRD 21) | `/analytics` — operational, AI-performance and commercial metrics kept apart, over a selectable 7/30/90-day window |
 | Audit UI (PRD 17.1) | `/audit` — filterable, append-only |
 | Lead & call detail (PRD 14.4) | `/leads/[id]`, `/calls` — consent basis and config version per call |
 
