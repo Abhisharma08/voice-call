@@ -193,6 +193,7 @@ async function main() {
   let token: string;
   let tenantId: string;
   let campaignId: string;
+  let campaignModel: string | null = null;
 
   try {
     await db.query("begin");
@@ -204,11 +205,12 @@ async function main() {
     tenantId = tenant.rows[0]?.id ?? "";
     if (!tenantId) throw new Error(`No tenant with slug "${TENANT_SLUG}". Run \`npm run db:reset\` first`);
 
-    const campaign = await db.query<{ id: string }>(
-      `select id from campaigns where tenant_id = $1 and name = $2`,
+    const campaign = await db.query<{ id: string; analysis_model: string }>(
+      `select id, analysis_model from campaigns where tenant_id = $1 and name = $2`,
       [tenantId, CAMPAIGN_NAME],
     );
     campaignId = campaign.rows[0]?.id ?? "";
+    campaignModel = campaign.rows[0]?.analysis_model ?? null;
     if (!campaignId) {
       throw new Error(`Tenant "${TENANT_SLUG}" has no campaign named "${CAMPAIGN_NAME}"`);
     }
@@ -349,11 +351,19 @@ async function main() {
 
   // ── 4. Qualification ─────────────────────────────────────────────────────
   console.log(`\n4. Qualification (W03) for ${analysable.length} connected calls`);
-  const hasKey = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+  // Which key matters depends on the campaign's model, not on Anthropic being
+  // the only option: a campaign on `gemini-*` needs GEMINI_API_KEY and does
+  // not care whether an Anthropic key exists.
+  const model = campaignModel ?? "";
+  const hasKey = model.startsWith("gemini-")
+    ? Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)
+    : Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+
   if (!hasKey) {
-    console.log("   No ANTHROPIC_API_KEY set - analysis will degrade to 'unknown' and every");
-    console.log("   result will be held for review. That is the PRD 18.2 fallback working,");
-    console.log("   but you will not see real intents until a key is available.");
+    const needed = model.startsWith("gemini-") ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
+    console.log(`   No ${needed} set for model "${model}" - analysis will degrade to`);
+    console.log("   'unknown' and every result will be held for review. That is the PRD 18.2");
+    console.log("   fallback working, but you will not see real intents until a key is set.");
   }
 
   for (const callId of analysable) {
