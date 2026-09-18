@@ -80,6 +80,29 @@ export class HubSpotClient {
     return new HubSpotClient(JSON.parse(raw) as HubSpotCredentials, fetchImpl);
   }
 
+  /**
+   * The portal this access token belongs to.
+   *
+   * A private-app webhook identifies its account only by `portalId`, and
+   * `app.hubspot_portal_lookup` is what turns that into a tenant. Nothing in
+   * the credential JSON carries the number and the add-credential form has no
+   * field for it, so an integration created through the UI used to leave it
+   * null - and every inbound event was then rejected as an unknown portal,
+   * silently, with the same response a forged one gets. Deriving it from the
+   * token removes the step rather than adding a field to forget.
+   */
+  async fetchPortalId(): Promise<number> {
+    const body = (await this.request("/account-info/v3/details", "GET", undefined)) as {
+      portalId?: unknown;
+    } | null;
+
+    const portalId = Number(body?.portalId);
+    if (!Number.isSafeInteger(portalId) || portalId <= 0) {
+      throw new IntegrationError("HubSpot did not return a portal id for this token", false);
+    }
+    return portalId;
+  }
+
   async updateContact(recordId: string, update: ContactUpdate): Promise<void> {
     await this.request(`/crm/v3/objects/contacts/${encodeURIComponent(recordId)}`, "PATCH", {
       properties: contactProperties(update),

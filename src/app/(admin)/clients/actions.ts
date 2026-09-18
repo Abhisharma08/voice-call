@@ -15,6 +15,7 @@ import {
   templateById,
 } from "@/lib/onboarding/templates";
 import { validateSlackCredential } from "@/lib/integrations/slack";
+import { HubSpotClient } from "@/lib/integrations/hubspot";
 
 /**
  * Client onboarding (PRD 14.3).
@@ -169,6 +170,13 @@ export async function addIntegration(formData: FormData): Promise<ActionResult> 
   const shapeError = validateCredentialShape(type, credential);
   if (shapeError) return failure(shapeError, "credential");
 
+  // Derive the portal id now, outside the transaction, so a slow HubSpot does
+  // not hold a write lock. A failure is not fatal: the credential may still be
+  // wanted for CRM write-back, which needs no portal id. It only means inbound
+  // private-app webhooks cannot resolve a tenant yet, and /integrations says
+  // so rather than leaving every event to be dropped as an unknown portal.
+  const portalId = type === "hubspot" ? await derivePortalId(credential) : null;
+
   return tenantAction({ tenantId, permission: "secret:write" }, async (ctx) => {
     const sealed = sealSecret(credential, type);
 
@@ -188,9 +196,9 @@ export async function addIntegration(formData: FormData): Promise<ActionResult> 
     );
 
     const integration = await ctx.tx.query<{ id: string }>(
-      `insert into integrations (tenant_id, type, name, credential_ref, created_by)
-       values ($1, $2, $3, $4, $5) returning id`,
-      [tenantId, type, name, secret.rows[0]!.id, ctx.user.id],
+      `insert into integrations (tenant_id, type, name, credential_ref, created_by, hubspot_portal_id)
+       values ($1, $2, $3, $4, $5, $6) returning id`,
+      [tenantId, type, name, secret.rows[0]!.id, ctx.user.id, portalId],
     );
 
     await ctx.audit({
@@ -198,13 +206,26 @@ export async function addIntegration(formData: FormData): Promise<ActionResult> 
       entityType: "integration",
       entityId: integration.rows[0]!.id,
       // The credential itself never reaches the audit log.
-      metadata: { type, name },
+      metadata: { type, name, hubspot_portal_id: portalId },
     });
 
     revalidatePath("/integrations");
     revalidatePath("/clients");
     return success();
   });
+}
+
+/**
+ * Ask HubSpot which portal a token belongs to, returning null rather than
+ * throwing. See HubSpotClient.fetchPortalId for why this is derived at all.
+ */
+async function derivePortalId(credential: string): Promise<number | null> {
+  try {
+    const creds = JSON.parse(credential) as { accessToken: string };
+    return await new HubSpotClient(creds).fetchPortalId();
+  } catch {
+    return null;
+  }
 }
 
 function validateCredentialShape(type: string, credential: string): string | null {
