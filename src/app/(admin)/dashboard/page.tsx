@@ -75,7 +75,7 @@ export default async function DashboardPage() {
       {counts ? (
         <div className="grid">
           <Stat title="Leads" value={counts.leads} note="All statuses" />
-          <Stat title="Active campaigns" value={counts.campaigns} note="Compliance-approved only" />
+          <Stat title="Active campaigns" value={counts.campaigns} note="Calling right now" />
           <Stat title="Pending review" value={counts.pendingReview} note="Held from CRM sync (PRD 26.3)" />
           <Stat title="Callbacks due" value={counts.callbacksDue} note="Next 24 hours" />
           <Stat title="Sync backlog" value={counts.syncBacklog} note="HubSpot / Sheets pending" />
