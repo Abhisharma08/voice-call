@@ -44,8 +44,10 @@ export default async function IntegrationsPage() {
       created_by_email: string | null;
       used_by_campaigns: string;
       last_verified_at: Date | null;
+      hubspot_portal_id: string | null;
     }>(
       `select i.id, i.type, i.name, i.status, i.last_error, i.created_at, i.last_verified_at,
+              i.hubspot_portal_id,
               s.key_id, u.email as created_by_email,
               (select count(*) from campaigns c where c.hubspot_integration_id = i.id) as used_by_campaigns
          from integrations i
@@ -156,6 +158,25 @@ export default async function IntegrationsPage() {
               {Number(i.used_by_campaigns) > 0 ? (
                 <div style={{ fontSize: 12, color: "var(--muted)" }}>
                   Used by {i.used_by_campaigns} campaign{Number(i.used_by_campaigns) === 1 ? "" : "s"}
+                </div>
+              ) : null}
+
+              {/* Inbound intake needs two things this credential may not
+                  carry, and neither failure is visible from the outside: an
+                  event for an unknown portal, and one whose signature cannot
+                  be checked, are both answered exactly like a forged one
+                  (PRD 23.3). Said here instead, where it can be fixed. */}
+              {i.type === "hubspot" && !i.hubspot_portal_id ? (
+                <div style={{ fontSize: 12, color: "var(--warn, #d08b2c)" }}>
+                  No portal id: HubSpot could not be asked which account this token belongs to, so
+                  inbound leads from its private app are dropped as an unknown portal. Re-add the
+                  credential once the token is valid.
+                </div>
+              ) : null}
+              {i.type === "hubspot" && i.hubspot_portal_id ? (
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                  Portal {i.hubspot_portal_id} &middot; inbound webhook:{" "}
+                  <code>/api/webhooks/hubspot/events</code>
                 </div>
               ) : null}
 
