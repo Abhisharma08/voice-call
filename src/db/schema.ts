@@ -361,6 +361,8 @@ export const callAttempts = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     durationSec: integer("duration_sec"),
+    /** PRD 21 lead-to-call latency, stamped at dial time (migration 0013). */
+    queueLatencySec: integer("queue_latency_sec"),
     recordingRef: text("recording_ref"),
     failureReason: text("failure_reason"),
     /** PRD 26.1: consent basis stamped at call time, so each call is justifiable. */

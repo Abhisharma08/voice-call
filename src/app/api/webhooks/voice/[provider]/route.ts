@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { withScope } from "@/db/client";
 import { authenticateService, withServiceScope } from "@/lib/auth/service";
 import { resolveProvider } from "@/lib/providers/voice";
@@ -6,6 +6,7 @@ import { ProviderError, type NormalizedWebhook } from "@/lib/providers/voice/typ
 import { publicRequestUrl } from "@/lib/providers/voice/public-url";
 import { recordCallResult } from "@/lib/calling/results";
 import { qualifyCall } from "@/lib/qualification/pipeline";
+import { flushTenantOutbox } from "@/lib/integrations/sync-worker";
 import { recordUnscopedAudit } from "@/lib/audit";
 import {
   RateLimits,
@@ -128,6 +129,19 @@ export async function POST(
       outcome.status === "recorded" && outcome.needsAnalysis && outcome.callId
         ? await qualify(tenantId, outcome.callId)
         : null;
+
+    // Qualification enqueues the Sheets append, the HubSpot update and the hot
+    // lead notification into sync_outbox. Draining it here rather than leaving
+    // it to the next cron pass is the difference between a result landing in
+    // the client's sheet now and up to a minute from now - which, for a caller
+    // watching the sheet after a call, is the whole of what "slow" means.
+    //
+    // After the response, because the provider does not need to wait for a
+    // Google Sheets round trip to learn we accepted its callback, and only
+    // when something was actually enqueued.
+    if (analysis && "synced" in analysis && analysis.synced) {
+      after(() => flushTenantOutbox(tenantId));
+    }
 
     return NextResponse.json({ ...outcome, analysis }, { status: 202 });
   } catch (err) {
