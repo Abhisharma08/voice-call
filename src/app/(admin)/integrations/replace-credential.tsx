@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { replaceIntegrationCredential } from "./actions";
+import { VoiceCredentialFields } from "./voice-credential-fields";
 
 /**
  * Rotate an integration's secret without disturbing the integration.
@@ -21,7 +22,6 @@ const PLACEHOLDERS: Record<string, string> = {
   hubspot: '{"accessToken": "pat-na1-...", "clientSecret": "..."}',
   google_sheets:
     '{"client_email": "...@....iam.gserviceaccount.com", "private_key": "-----BEGIN PRIVATE KEY-----\\n..."}',
-  voice_provider: '{"accountSid": "...", "authToken": "..."}',
   notification: '{"webhookUrl": "https://hooks.slack.com/..."}',
 };
 
@@ -87,22 +87,28 @@ export function ReplaceCredential({
 
   return (
     <form className="stack" style={{ gap: 8, marginTop: 4 }} onSubmit={onSubmit}>
-      <label htmlFor={`cred-${integrationId}`} style={{ fontSize: 12 }}>
-        New credential JSON
-      </label>
-      <textarea
-        id={`cred-${integrationId}`}
-        name="credential"
-        required
-        rows={4}
-        placeholder={PLACEHOLDERS[type]}
-        style={{
-          width: "100%",
-          resize: "vertical",
-          fontFamily: "ui-monospace, monospace",
-          fontSize: 12,
-        }}
-      />
+      {type === "voice_provider" ? (
+        <VoiceCredentialFields />
+      ) : (
+        <>
+          <label htmlFor={`cred-${integrationId}`} style={{ fontSize: 12 }}>
+            New credential JSON
+          </label>
+          <textarea
+            id={`cred-${integrationId}`}
+            name="credential"
+            required
+            rows={4}
+            placeholder={PLACEHOLDERS[type]}
+            style={{
+              width: "100%",
+              resize: "vertical",
+              fontFamily: "ui-monospace, monospace",
+              fontSize: 12,
+            }}
+          />
+        </>
+      )}
       <span style={{ fontSize: 11, color: "var(--muted)" }}>
         Replaces the stored secret and deletes the old one. The integration keeps its id, so every
         campaign pointing at it follows the new credential.

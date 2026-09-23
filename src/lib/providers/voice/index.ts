@@ -98,7 +98,7 @@ const PROVIDER_REQUIREMENTS: Array<{ name: string; vars: string[]; note: string 
       "SARVAM_CONNECTION_ID",
       "SARVAM_AGENT_PHONE_NUMBER",
     ],
-    note: "India-native conversational voice agent, and the provider PRD 17.3 points at for production. Sarvam runs the conversation; this platform only starts the call and reads the result.",
+    note: "India-native conversational voice agent, and the one meant for production here. Sarvam runs the conversation; this platform only starts the call and reads the result.",
   },
 ];
 

@@ -3,8 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { failure, success, tenantAction, type ActionResult } from "@/lib/actions";
-import { sealSecret, type SealedSecret } from "@/lib/crypto/kms";
+import { openSecret, sealSecret, type SealedSecret } from "@/lib/crypto/kms";
 import { derivePortalId, validateCredentialShape } from "@/lib/integrations/credentials";
+import { providerOf, type VoiceCredential } from "@/lib/providers/voice/credentials";
+import { buildProvider } from "@/lib/providers/voice/tenant";
+import { SarvamVoiceProvider } from "@/lib/providers/voice/sarvam";
 import { HubSpotClient, IntegrationError } from "@/lib/integrations/hubspot";
 import {
   DEFAULT_SHEET_RANGE,
@@ -86,6 +89,11 @@ export async function replaceIntegrationCredential(
   // Outside the transaction, for the reason addIntegration derives it there.
   const portalId = type === "hubspot" ? await derivePortalId(credential) : null;
 
+  // A rotation may also move a client from one voice provider to another, so
+  // the name on the row is rewritten from the new credential rather than left
+  // pointing at the old adapter.
+  const voiceProvider = type === "voice_provider" ? providerOf(credential) : null;
+
   return tenantAction({ tenantId, permission: "secret:write" }, async (ctx) => {
     const sealed = sealSecret(credential, type);
 
@@ -104,9 +112,11 @@ export async function replaceIntegrationCredential(
               last_error = null,
               last_verified_at = null,
               hubspot_portal_id = coalesce($4, hubspot_portal_id),
+              config = case when $5::text is null then config
+                            else jsonb_set(config, '{provider}', to_jsonb($5::text)) end,
               updated_at = now()
         where id = $1 and tenant_id = $2`,
-      [integrationId, tenantId, secret.rows[0]!.id, portalId],
+      [integrationId, tenantId, secret.rows[0]!.id, portalId, voiceProvider],
     );
 
     if (previousSecretId) {
@@ -121,7 +131,7 @@ export async function replaceIntegrationCredential(
       entityType: "integration",
       entityId: integrationId,
       // The credential itself never reaches the audit log.
-      metadata: { type, hubspot_portal_id: portalId },
+      metadata: { type, hubspot_portal_id: portalId, voice_provider: voiceProvider },
     });
 
     revalidatePath("/integrations");
@@ -198,7 +208,9 @@ export async function testIntegration(formData: FormData): Promise<ActionResult<
             ? await testSheets(sealed, spreadsheetId, sheetRange)
             : record.type === "notification"
               ? await testSlack(sealed)
-              : { ok: false, summary: `No connection test for ${record.type} yet`, details: [] };
+              : record.type === "voice_provider"
+                ? await testVoiceProvider(sealed)
+                : { ok: false, summary: `No connection test for ${record.type} yet`, details: [] };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
@@ -238,6 +250,32 @@ export async function testIntegration(formData: FormData): Promise<ActionResult<
     revalidatePath("/integrations");
     return success(report);
   });
+}
+
+/**
+ * Prove a voice credential without placing a call.
+ *
+ * Twilio has no equivalent cheap probe that does not touch the account's call
+ * log, so it is reported as stored-but-unverified rather than given a
+ * misleading green tick.
+ */
+async function testVoiceProvider(sealed: SealedSecret): Promise<ConnectionReport> {
+  const credential = JSON.parse(openSecret(sealed, "voice_provider")) as VoiceCredential;
+  const provider = buildProvider(credential);
+
+  if (provider instanceof SarvamVoiceProvider) {
+    const result = await provider.verifyConnection();
+    return { ok: true, summary: result.summary, details: result.details };
+  }
+
+  return {
+    ok: true,
+    summary: `${credential.provider} credential stored`,
+    details: [
+      "No read-only check exists for this provider, so nothing here proves it can dial.",
+      "The first real call is the test. Use the campaign's dial allowlist for it.",
+    ],
+  };
 }
 
 async function testHubSpot(sealed: SealedSecret): Promise<ConnectionReport> {

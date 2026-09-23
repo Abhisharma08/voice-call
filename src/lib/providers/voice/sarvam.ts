@@ -165,6 +165,41 @@ export class SarvamVoiceProvider implements VoiceProvider {
   }
 
   /**
+   * Prove the credential before a campaign depends on it.
+   *
+   * The analytics list is the cheapest call that exercises every field except
+   * the connection: a wrong API key is 401, a wrong org, workspace or app id
+   * is a 404 or an empty-handed 400. It places no call and costs nothing,
+   * which is what makes it safe to put behind a button.
+   *
+   * The connection id and agent number cannot be checked without dialling, so
+   * they are reported as untested rather than implied to be good.
+   */
+  async verifyConnection(): Promise<{ summary: string; details: string[] }> {
+    const end = new Date();
+    const start = new Date(end.getTime() - 3600 * 1000);
+
+    const url =
+      `${ANALYTICS_BASE}/v1/${enc(this.config.orgId)}/${enc(this.config.workspaceId)}/` +
+      `${enc(this.config.appId)}/attempts` +
+      `?start_datetime=${encodeURIComponent(start.toISOString())}` +
+      `&end_datetime=${encodeURIComponent(end.toISOString())}` +
+      `&limit=1`;
+
+    const body = (await this.get(url)) as { items?: unknown[] } | null;
+
+    return {
+      summary: `Sarvam app ${this.config.appId} reachable in workspace ${this.config.workspaceId}`,
+      details: [
+        "API key, organisation, workspace and app id all accepted.",
+        `Recent attempts visible: ${Array.isArray(body?.items) ? body.items.length : 0} in the last hour.`,
+        `Connection ${this.config.connectionId} and agent number ${this.config.agentPhoneNumber} ` +
+          "are not exercised by this check - only a real call uses them.",
+      ],
+    };
+  }
+
+  /**
    * Sarvam exposes attempts as a time-windowed list rather than a get-by-id,
    * so this queries a window around now and filters. Only a fallback - the
    * webhook is the primary path, and this exists for reconciling a call whose

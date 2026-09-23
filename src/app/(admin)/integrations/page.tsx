@@ -1,7 +1,9 @@
+import type { PoolClient } from "pg";
 import { requireUser } from "@/lib/auth/current-user";
 import { withTenant } from "@/lib/auth/tenant";
 import { can } from "@/lib/auth/rbac";
 import { providerDiagnostics } from "@/lib/providers/voice";
+import { credentialSourceFor } from "@/lib/providers/voice/tenant";
 import { AddIntegrationForm } from "./add-integration-form";
 import { TestConnection } from "./test-connection";
 import { ReplaceCredential } from "./replace-credential";
@@ -33,7 +35,10 @@ export default async function IntegrationsPage() {
 
   const tenantId = user.activeTenantId;
 
-  const { integrations, spreadsheetId, sheetRange, deadLetters } = await withTenant(user, tenantId, async (tx) => {
+  const { integrations, spreadsheetId, sheetRange, deadLetters, voiceSources } = await withTenant(
+    user,
+    tenantId,
+    async (tx) => {
     const r = await tx.query<{
       id: string;
       type: string;
@@ -126,8 +131,16 @@ export default async function IntegrationsPage() {
         leadPhoneLast4: row.phone_last4,
         campaignName: row.campaign_name,
       })),
+      // Read inside the same scoped transaction as everything else, so the
+      // panel below reflects this client rather than the process.
+      //
+      // Sequentially, not Promise.all: these share one pooled connection, and
+      // pg cannot run two queries on it at once. It serialises them anyway and
+      // warns, which is a deprecation today and an error in pg@9.
+      voiceSources: await voiceCredentialSources(tx),
     };
-  });
+    },
+  );
 
   return (
     <>
@@ -227,34 +240,45 @@ export default async function IntegrationsPage() {
       ) : null}
 
       {/*
-        Voice providers are platform-wide, not per client: they register from
-        environment variables at boot, and a campaign selects one by name. This
-        panel exists because an unconfigured choice otherwise fails at claim
-        time, in a worker log, minutes after someone thought they had set it up.
+        A provider can come from this client's own credential above, or from
+        the agency's shared account in the environment. This panel says which,
+        because an unconfigured choice otherwise fails at claim time - in a
+        worker log, minutes after someone thought they had set it up.
       */}
       <div style={{ marginTop: 24 }}>
         <h2 style={{ fontSize: 15, margin: "0 0 4px" }}>Voice providers</h2>
         <p style={{ color: "var(--muted)", fontSize: 12, margin: "0 0 10px" }}>
-          Registered from the environment, shared by every client, selected per campaign.
+          What this client can dial with. A credential added above is used in preference to the
+          agency&rsquo;s shared account, and a campaign selects one by name.
         </p>
 
         <div className="stack">
-          {providerDiagnostics().map((p) => (
-            <div key={p.name} className="card stack" style={{ gap: 6 }}>
-              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                <strong>{p.name}</strong>
-                <span className={`pill ${p.registered ? "ok" : "warn"}`}>
-                  {p.registered ? "selectable" : "not configured"}
-                </span>
-              </div>
-              <div style={{ fontSize: 12, color: "var(--muted)" }}>{p.note}</div>
-              {p.missing.length > 0 ? (
-                <div style={{ fontSize: 12 }}>
-                  Set {p.missing.map((v) => <code key={v}>{v} </code>)} and restart to register it.
+          {providerDiagnostics().map((p) => {
+            const source = voiceSources[p.name] ?? "none";
+            const usable = source !== "none";
+
+            return (
+              <div key={p.name} className="card stack" style={{ gap: 6 }}>
+                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <strong>{p.name}</strong>
+                  <span className={`pill ${usable ? "ok" : "warn"}`}>
+                    {usable ? "selectable" : "not configured"}
+                  </span>
+                  {source === "client" ? (
+                    <span className="pill info">this client&rsquo;s own credential</span>
+                  ) : null}
+                  {source === "platform" ? <span className="pill">agency account</span> : null}
                 </div>
-              ) : null}
-            </div>
-          ))}
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>{p.note}</div>
+                {source === "none" && p.missing.length > 0 ? (
+                  <div style={{ fontSize: 12 }}>
+                    Add a credential above, or set {p.missing.map((v) => <code key={v}>{v} </code>)}
+                    and restart to share the agency account with every client.
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -269,4 +293,15 @@ export default async function IntegrationsPage() {
       )}
     </>
   );
+}
+
+/** Where each provider's credential comes from, for this client. */
+async function voiceCredentialSources(
+  tx: PoolClient,
+): Promise<Record<string, "client" | "platform" | "none">> {
+  const sources: Record<string, "client" | "platform" | "none"> = {};
+  for (const p of providerDiagnostics()) {
+    sources[p.name] = await credentialSourceFor(tx, p.name);
+  }
+  return sources;
 }

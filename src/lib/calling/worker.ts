@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { claimLeads, releaseClaim, type ClaimedLead } from "@/lib/calling/queue";
 import { backoffDelayMs } from "@/lib/calling/retry";
-import { resolveProvider } from "@/lib/providers/voice";
+import { resolveProviderForTenant } from "@/lib/providers/voice/tenant";
 import { ProviderError } from "@/lib/providers/voice/types";
 import { auditInTx } from "@/lib/audit";
 import { fulfilCallbacksForLead } from "@/lib/calling/callbacks";
@@ -161,7 +161,10 @@ async function dialOne(
   });
 
   try {
-    const provider = resolveProvider(lead.provider);
+    // Resolved inside the tenant's transaction, so a client with their own
+    // Sarvam or Twilio account is dialled through it rather than through the
+    // agency's shared one.
+    const provider = await resolveProviderForTenant(tx, lead.provider);
     const result = await provider.createCall({
       to: lead.phoneE164,
       callId,

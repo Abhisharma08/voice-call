@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { addIntegration } from "../clients/actions";
+import { VoiceCredentialFields } from "./voice-credential-fields";
 
 const PLACEHOLDERS: Record<string, string> = {
   hubspot: '{"accessToken": "pat-na1-...", "clientSecret": "..."}',
   google_sheets: '{"client_email": "...@....iam.gserviceaccount.com", "private_key": "-----BEGIN PRIVATE KEY-----\\n..."}',
-  voice_provider: '{"accountSid": "...", "authToken": "..."}',
   notification: '{"webhookUrl": "https://hooks.slack.com/..."}',
 };
 
@@ -62,19 +62,26 @@ export function AddIntegrationForm({ tenantId }: { tenantId: string }) {
         </div>
       </div>
 
-      <div>
-        <label htmlFor="credential">Credential JSON</label>
-        <textarea
-          id="credential"
-          name="credential"
-          required
-          rows={4}
-          placeholder={PLACEHOLDERS[type]}
-          style={{ width: "100%", resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
-        />
-        <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 4 }}>
-          Sealed with a per-secret data key before it reaches the database, and never shown again.
+      {/* A voice provider is a handful of values read off a dashboard, so it
+          gets real fields. The others arrive as a file or a URL already. */}
+      {type === "voice_provider" ? (
+        <VoiceCredentialFields />
+      ) : (
+        <div>
+          <label htmlFor="credential">Credential JSON</label>
+          <textarea
+            id="credential"
+            name="credential"
+            required
+            rows={4}
+            placeholder={PLACEHOLDERS[type]}
+            style={{ width: "100%", resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+          />
         </div>
+      )}
+
+      <div style={{ color: "var(--muted)", fontSize: 11 }}>
+        Sealed with a per-secret data key before it reaches the database, and never shown again.
       </div>
 
       {error ? <p className="error">{error}</p> : null}

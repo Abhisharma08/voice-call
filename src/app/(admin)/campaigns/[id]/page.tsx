@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth/current-user";
 import { withTenant } from "@/lib/auth/tenant";
 import { can } from "@/lib/auth/rbac";
 import { loadCampaignConfig, activationBlockers } from "@/lib/campaigns/config";
-import { providerNames } from "@/lib/providers/voice";
+import { providersForTenant } from "@/lib/providers/voice/tenant";
 import { CampaignEditor } from "./campaign-editor";
 import { CallingStatus } from "./calling-status";
 
@@ -45,6 +45,9 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
     return {
       config,
+      // Includes anything this client has its own credential for, not only
+      // what the process registered from the environment.
+      providers: await providersForTenant(tx),
       hubspotIntegrations: integrations.rows,
       versions: versions.rows.map((v) => ({
         version: v.version,
@@ -84,7 +87,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         tenantId={user.activeTenantId}
         campaignId={id}
         initial={data.config}
-        providers={providerNames()}
+        providers={data.providers}
         hubspotIntegrations={data.hubspotIntegrations}
         versions={data.versions}
         readOnly={!can(user.role, "campaign:write")}

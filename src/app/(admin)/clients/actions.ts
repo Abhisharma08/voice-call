@@ -5,6 +5,7 @@ import { z } from "zod";
 import { failure, globalAction, success, tenantAction, type ActionResult } from "@/lib/actions";
 import { sealSecret } from "@/lib/crypto/kms";
 import { derivePortalId, validateCredentialShape } from "@/lib/integrations/credentials";
+import { providerOf } from "@/lib/providers/voice/credentials";
 import { activationBlockers, DEFAULT_CAMPAIGN_CONFIG } from "@/lib/campaigns/config";
 import { auditInTx } from "@/lib/audit";
 import { can } from "@/lib/auth/rbac";
@@ -176,6 +177,12 @@ export async function addIntegration(formData: FormData): Promise<ActionResult> 
   // so rather than leaving every event to be dropped as an unknown portal.
   const portalId = type === "hubspot" ? await derivePortalId(credential) : null;
 
+  // Which voice provider this credential is for, recorded in the clear on the
+  // integration row. Everything that needs to know - the campaign form, the
+  // dialler choosing an adapter - can then read it without unsealing a secret
+  // just to learn a name.
+  const config = type === "voice_provider" ? { provider: providerOf(credential) } : {};
+
   return tenantAction({ tenantId, permission: "secret:write" }, async (ctx) => {
     const sealed = sealSecret(credential, type);
 
@@ -195,9 +202,9 @@ export async function addIntegration(formData: FormData): Promise<ActionResult> 
     );
 
     const integration = await ctx.tx.query<{ id: string }>(
-      `insert into integrations (tenant_id, type, name, credential_ref, created_by, hubspot_portal_id)
-       values ($1, $2, $3, $4, $5, $6) returning id`,
-      [tenantId, type, name, secret.rows[0]!.id, ctx.user.id, portalId],
+      `insert into integrations (tenant_id, type, name, credential_ref, created_by, hubspot_portal_id, config)
+       values ($1, $2, $3, $4, $5, $6, $7::jsonb) returning id`,
+      [tenantId, type, name, secret.rows[0]!.id, ctx.user.id, portalId, JSON.stringify(config)],
     );
 
     await ctx.audit({
@@ -205,7 +212,7 @@ export async function addIntegration(formData: FormData): Promise<ActionResult> 
       entityType: "integration",
       entityId: integration.rows[0]!.id,
       // The credential itself never reaches the audit log.
-      metadata: { type, name, hubspot_portal_id: portalId },
+      metadata: { type, name, hubspot_portal_id: portalId, ...config },
     });
 
     revalidatePath("/integrations");

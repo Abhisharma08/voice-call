@@ -1,5 +1,6 @@
 import { HubSpotClient } from "@/lib/integrations/hubspot";
 import { validateSlackCredential } from "@/lib/integrations/slack";
+import { validateVoiceCredential } from "@/lib/providers/voice/credentials";
 
 /**
  * Credential checks shared by adding an integration and replacing its secret.
@@ -56,6 +57,13 @@ export function validateCredentialShape(type: string, credential: string): strin
   // and checked for shape here, while the plaintext is still in hand.
   if (type === "notification") {
     return validateSlackCredential(credential);
+  }
+
+  // A voice credential is the one that spends money on the client's behalf and
+  // puts a number on someone's phone, so the shape check is the strictest of
+  // the four: every field the adapter reads, and an E.164 caller ID.
+  if (type === "voice_provider") {
+    return validateVoiceCredential(credential);
   }
 
   if (type === "google_sheets") {
