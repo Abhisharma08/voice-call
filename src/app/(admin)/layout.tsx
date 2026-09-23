@@ -60,7 +60,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <div className="brand">
           <span className="dot" />
           <span>
-            Lead Calling
+            Lead Qualifier
             <small>Control plane</small>
           </span>
         </div>

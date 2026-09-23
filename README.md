@@ -1,12 +1,17 @@
-# AI Lead Calling Platform
+# AI Lead Qualifier
 
-An open-source, multi-tenant platform that calls inbound leads with an AI voice
-agent, qualifies them from the transcript, and writes the result back to the
-CRM — with a human review gate in front of anything it is not sure about.
+**Open-source AI voice agent for lead qualification.** It calls inbound leads,
+holds the conversation, qualifies them from the call transcript, scores them
+against a per-campaign rubric, and writes the result back to HubSpot, Google
+Sheets and Slack — with a human review gate in front of anything it is not
+sure about.
 
-Built for an agency running campaigns on behalf of several clients, so tenancy,
-per-client credentials and per-client scoping of staff are load-bearing rather
-than bolted on.
+Multi-tenant by design: built for an agency running outbound calling campaigns
+on behalf of several clients, so tenancy, per-client credentials and per-client
+scoping of staff are load-bearing rather than bolted on.
+
+Next.js · PostgreSQL row-level security · Twilio / Sarvam voice · Claude or
+Gemini for qualification.
 
 ```
    HubSpot / webhook              this platform                    back out
@@ -675,7 +680,7 @@ do-not-call compliance are all deployment obligations, not features you get for
 free by running this.
 
 To report a vulnerability, open a
-[security advisory](https://github.com/Abhisharma08/voice-call/security/advisories/new)
+[security advisory](https://github.com/Abhisharma08/ai-lead-qualifier/security/advisories/new)
 rather than a public issue.
 
 Never commit a real credential. `.env.local` is gitignored; `.env.example`

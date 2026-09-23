@@ -1,8 +1,34 @@
 {
-  "name": "ai-lead-calling-platform",
+  "name": "ai-lead-qualifier",
   "version": "0.1.0",
+  "description": "Multi-tenant AI voice agent that calls inbound leads, qualifies them from the call transcript, and syncs the result to your CRM.",
+  "keywords": [
+    "ai-lead-qualification",
+    "lead-qualification",
+    "ai-voice-agent",
+    "voice-ai",
+    "outbound-calling",
+    "lead-scoring",
+    "crm-automation",
+    "hubspot",
+    "twilio",
+    "sarvam",
+    "multi-tenant",
+    "row-level-security",
+    "nextjs",
+    "postgresql"
+  ],
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "homepage": "https://github.com/Abhisharma08/ai-lead-qualifier#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abhisharma08/ai-lead-qualifier.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Abhisharma08/ai-lead-qualifier/issues"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -47,11 +73,5 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
-  },
-  "license": "MIT",
-  "description": "Multi-tenant platform that calls inbound leads with an AI voice agent, qualifies them from the transcript, and syncs the result to a CRM.",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Abhisharma08/voice-call.git"
   }
 }
