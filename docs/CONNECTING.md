@@ -309,14 +309,60 @@ For the development fixtures, `npm run db:seed:phase1` prints one.
 
 ## 6. Voice provider
 
-Two are registered: `mock` (places no calls, returns scripted transcripts) and
-`sarvam`.
+Three adapters exist: `mock` (places no calls, returns scripted transcripts),
+`sarvam`, and `twilio`.
+
+### Where a provider's credentials come from
+
+Two sources, and the first one that has a credential wins:
+
+| Source | Scope | Set up in |
+| --- | --- | --- |
+| **The client's own credential** | One client | Integrations → Add a credential → Voice provider |
+| **The agency's account** | Every client | `.env.local` / deployment environment |
+
+A client with their own Sarvam workspace or Twilio account is dialled through
+it — billed to their account, calling from their number. A client without one
+falls back to the agency's. Neither is more "correct": one shared account
+across every client is an ordinary arrangement and needs no rows at all.
+
+In the UI the credential is entered as fields rather than pasted as JSON:
+choose the provider and fill in what its console gives you. It is sealed with a
+per-secret data key before it reaches the database and is never read back —
+the page shows a status, never a secret. To rotate one, use **Replace
+credential**; the integration keeps its id, so every campaign pointing at it
+follows the new credential.
+
+Two values are always environment-level, whichever path you take:
+`VOICE_WEBHOOK_SECRET` (it keys a token this platform mints and verifies
+itself) and `APP_URL` (where the provider has to reach this process). Neither
+is a property of a client's account, and a per-client value for either is a
+per-client way to break inbound callbacks.
+
+The **Voice providers** panel on the Integrations page says, per provider,
+whether this client is selectable at all and whether it is on their own
+credential or the agency's. The campaign's **Voice provider** dropdown lists
+exactly what that client can actually dial with.
 
 ### Sarvam AI
 
-Set these in `.env.local` and restart. The adapter registers only when all six
-are present, so a half-configured provider fails at claim time with a clear
-message rather than dialling.
+Two ways in. They do the same thing; pick by who owns the account.
+
+**Per client, in the UI** — **Integrations → Add a credential → Voice
+provider → Sarvam AI**, then seven fields: API key, organisation, workspace,
+app, app version (optional, defaults to 1), connection, and agent phone number.
+The number must be E.164; the form refuses anything else rather than letting
+the carrier reject it at dial time.
+
+**Test connection** then proves the API key, organisation, workspace and app id
+against Sarvam's analytics endpoint without placing a call. It reports the
+connection id and agent number as *untested*, because nothing but a real call
+exercises those — a green tick that implied otherwise would be worse than no
+check at all.
+
+**Agency-wide, in the environment** — set these in `.env.local` and restart.
+The adapter registers only when all six are present, so a half-configured
+provider fails at claim time with a clear message rather than dialling.
 
 ```
 SARVAM_API_KEY=

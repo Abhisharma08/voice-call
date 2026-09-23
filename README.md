@@ -76,10 +76,12 @@ prompts/questions/scoring, tenant dashboards and audit logs.
 | Config versioning (PRD 9) | Every save bumps `config_version` and snapshots into `campaign_versions` |
 | Activation checklist | A script, at least one question, and somewhere to write the answers — enforced at claim time |
 | Credentials (PRD 17.1) | `/integrations` — sealed on entry, validated for shape, never read back |
+| Voice provider per client | `/integrations` — a client's own Sarvam or Twilio account, entered as fields and sealed; the agency's environment account stays the fallback |
 | Staff & elevations (PRD 8.2) | `/settings` — assignments, time-boxed logged elevations |
 | KPIs (PRD 21) | `/analytics` — operational, AI-performance and commercial metrics kept apart, over a selectable 7/30/90-day window |
 | Audit UI (PRD 17.1) | `/audit` — filterable, append-only |
 | Lead & call detail (PRD 14.4) | `/leads/[id]`, `/calls` — consent basis and config version per call |
+| Callback worklist (FR-043) | `/callbacks` — outstanding and overdue callbacks, resolved automatically when the call goes out ([docs](docs/CALLBACKS.md)) |
 
 ---
 
@@ -131,7 +133,8 @@ in is routed from a contact property, since one private app has a single
 webhook URL for the whole portal.
 
 **Connecting real services** (HubSpot, Google Sheets, a voice provider): see
-[`docs/CONNECTING.md`](docs/CONNECTING.md). **Deploying it:**
+[`docs/CONNECTING.md`](docs/CONNECTING.md). **Working the callback queue:**
+[`docs/CALLBACKS.md`](docs/CALLBACKS.md). **Deploying it:**
 [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ---
@@ -414,9 +417,9 @@ same call. Nothing in the pipeline has the dial trigger as its only path.
 
 `/api/cron/tick` is that sweep, and it is what a serverless deployment can
 actually run. It covers what no single request can notice: a retry coming due
-hours later, a calling window opening, a requested callback, a lead stranded by
-an invocation that died mid-call, and the sync outbox clearing after a HubSpot
-or Sheets outage. One endpoint for every tenant and every campaign — an idle
+hours later, a calling window opening, a requested callback, a callback whose
+time passed with no call behind it, a lead stranded by an invocation that died
+mid-call, and the sync outbox clearing after a HubSpot or Sheets outage. One endpoint for every tenant and every campaign — an idle
 client costs nothing, because the pass enumerates outstanding work rather than
 looping over clients.
 
@@ -551,11 +554,11 @@ Three things are easy to get wrong and worth repeating here:
 
 ## Not built yet
 
-- **A voice provider proven in production.** Three adapters are registered:
-  `mock` (always available, places no calls), plus `sarvam` and `twilio`, which
-  register only when their environment variables are set — so selecting an
-  unconfigured provider fails loudly at claim time rather than dialling through
-  something half-set-up. Twilio is telephony only, driving TwiML this app
+- **A voice provider proven in production.** Three adapters exist: `mock`
+  (always available, places no calls), plus `sarvam` and `twilio`. Either can be
+  configured per client on the Integrations page, or agency-wide from the
+  environment; a provider with neither fails loudly at claim time rather than
+  dialling through something half-set-up. Twilio is telephony only, driving TwiML this app
   serves, and is there for local testing against a phone that actually rings.
   Neither has been run against a production account or volume.
 - **Email notifications** (PRD 16). Slack delivery is built - an incoming
@@ -568,8 +571,7 @@ Three things are easy to get wrong and worth repeating here:
   UI, structured logging and readiness checks are done.
 - **Live transfer, multi-channel follow-up, A/B testing** (Phase 4).
 
-Navigation entries for the unbuilt surfaces render a placeholder naming the
-phase that fills them.
+Every navigation entry now opens a real surface.
 
 ### What stops a campaign from calling
 
