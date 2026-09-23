@@ -98,8 +98,7 @@ export default async function SettingsPage() {
     <>
       <h1 className="page-title">Settings</h1>
       <p className="page-sub">
-        Agency staff, client assignments and temporary access elevations. Scope is by assignment, not
-        by employment (PRD 8.2).
+        Staff, client assignments and temporary access. Access follows assignment, not job title.
       </p>
 
       {data.elevations.length > 0 ? (

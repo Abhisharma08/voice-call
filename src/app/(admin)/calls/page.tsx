@@ -71,44 +71,42 @@ export default async function CallsPage() {
       {calls.length === 0 ? (
         <div className="empty">No calls placed yet for this client.</div>
       ) : (
-        <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <div className="table-wrap">
+          <table className="table">
             <thead>
               <tr>
                 {["When", "Lead", "Campaign", "Attempt", "Outcome", "Result", "Consent", "Config"].map(
                   (h) => (
-                    <th key={h} style={th}>
-                      {h}
-                    </th>
+                    <th key={h}>{h}</th>
                   ),
                 )}
               </tr>
             </thead>
             <tbody>
               {calls.map((c) => (
-                <tr key={c.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ ...td, whiteSpace: "nowrap", color: "var(--muted)", fontSize: 12 }}>
+                <tr key={c.id}>
+                  <td className="nowrap" style={{ color: "var(--muted)", fontSize: 12 }}>
                     {c.started_at ? c.started_at.toLocaleString() : "—"}
                   </td>
-                  <td style={td}>
-                    <Link href={`/leads/${c.lead_id}`} style={{ fontFamily: "ui-monospace, monospace" }}>
+                  <td>
+                    <Link href={`/leads/${c.lead_id}`} className="mono">
                       {c.phone_last4 ? `******${c.phone_last4}` : c.lead_id.slice(0, 8)}
                     </Link>
                   </td>
-                  <td style={td}>{c.campaign_name ?? "—"}</td>
-                  <td style={td}>#{c.attempt_no}</td>
-                  <td style={td}>
+                  <td>{c.campaign_name ?? "—"}</td>
+                  <td>#{c.attempt_no}</td>
+                  <td>
                     <span className={`pill ${c.status === "completed" ? "ok" : "warn"}`}>{c.status}</span>
                     {c.duration_sec ? (
                       <span style={{ color: "var(--muted)", marginLeft: 6 }}>{c.duration_sec}s</span>
                     ) : null}
                     {c.failure_reason ? (
-                      <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 3 }}>
+                      <div className="sub">
                         {c.failure_reason.slice(0, 60)}
                       </div>
                     ) : null}
                   </td>
-                  <td style={td}>
+                  <td>
                     {c.intent ? (
                       <>
                         <span className="pill">{c.intent}</span>
@@ -130,10 +128,10 @@ export default async function CallsPage() {
                     )}
                   </td>
                   {/* PRD 26.1: the basis this specific call was placed under. */}
-                  <td style={{ ...td, fontSize: 12, color: "var(--muted)" }}>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>
                     {c.consent_basis ?? "—"}
                   </td>
-                  <td style={{ ...td, fontSize: 12, color: "var(--muted)" }}>
+                  <td style={{ fontSize: 12, color: "var(--muted)" }}>
                     {c.campaign_config_version !== null ? `v${c.campaign_config_version}` : "—"}
                     <div style={{ fontSize: 11 }}>{c.provider}</div>
                   </td>
@@ -146,17 +144,3 @@ export default async function CallsPage() {
     </>
   );
 }
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: "9px 12px",
-  color: "var(--muted)",
-  fontWeight: 500,
-  fontSize: 11,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  borderBottom: "1px solid var(--border)",
-  whiteSpace: "nowrap",
-};
-
-const td: React.CSSProperties = { padding: "9px 12px", verticalAlign: "top" };

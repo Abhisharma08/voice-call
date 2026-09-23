@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireUser } from "@/lib/auth/current-user";
 import { withGlobalScope, withTenant } from "@/lib/auth/tenant";
 import { hasGlobalScope } from "@/lib/auth/rbac";
@@ -5,9 +6,8 @@ import { hasGlobalScope } from "@/lib/auth/rbac";
 export const dynamic = "force-dynamic";
 
 /**
- * Dashboard (PRD 14.2). Phase 0 wires the counts that already have tables
- * behind them; the call/intent widgets fill in with Phase 1, when calls start
- * being placed.
+ * Dashboard: the five numbers an operator checks first, each linking to the
+ * page that acts on it.
  *
  * Note the query path: every read goes through withTenant/withGlobalScope, so
  * the RLS predicate - not a WHERE clause someone might forget - is what keeps
@@ -74,36 +74,47 @@ export default async function DashboardPage() {
 
       {counts ? (
         <div className="grid">
-          <Stat title="Leads" value={counts.leads} note="All statuses" />
-          <Stat title="Active campaigns" value={counts.campaigns} note="Calling right now" />
-          <Stat title="Pending review" value={counts.pendingReview} note="Held from CRM sync (PRD 26.3)" />
-          <Stat title="Callbacks due" value={counts.callbacksDue} note="Next 24 hours" />
-          <Stat title="Sync backlog" value={counts.syncBacklog} note="HubSpot / Sheets pending" />
+          <Stat title="Leads" value={counts.leads} note="All statuses" href="/leads" />
+          <Stat title="Active campaigns" value={counts.campaigns} note="Calling now" href="/campaigns" />
+          <Stat
+            title="Pending review"
+            value={counts.pendingReview}
+            note="Waiting on a person"
+            href="/review"
+          />
+          <Stat title="Callbacks due" value={counts.callbacksDue} note="Next 24 hours" href="/callbacks" />
+          <Stat
+            title="Sync backlog"
+            value={counts.syncBacklog}
+            note="Not yet in HubSpot or Sheets"
+            href="/integrations"
+          />
         </div>
       ) : (
         <div className="empty">
           Select a client from the sidebar to see its queue, calls and review backlog.
         </div>
       )}
-
-      <div className="card" style={{ marginTop: 18 }}>
-        <h3>Phase 0</h3>
-        <p className="note" style={{ marginTop: 0 }}>
-          Foundations are in place: tenant-scoped schema with row-level security, RBAC, envelope-encrypted
-          secrets, column-level PII encryption, and the audit trail. Lead intake, calling and qualification
-          arrive in Phase 1.
-        </p>
-      </div>
     </>
   );
 }
 
-function Stat({ title, value, note }: { title: string; value: number; note: string }) {
+function Stat({
+  title,
+  value,
+  note,
+  href,
+}: {
+  title: string;
+  value: number;
+  note: string;
+  href: string;
+}) {
   return (
-    <div className="card">
+    <Link href={href} className="card">
       <h3>{title}</h3>
       <div className="value">{value.toLocaleString()}</div>
       <div className="note">{note}</div>
-    </div>
+    </Link>
   );
 }

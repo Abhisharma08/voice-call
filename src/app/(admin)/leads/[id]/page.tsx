@@ -180,7 +180,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
       <Section title="Consent">
         {data.consents.length === 0 ? (
           <div className="empty">
-            No consent record. This lead cannot be queued for calling (PRD 26.1).
+            No consent record. This lead cannot be queued for calling.
           </div>
         ) : (
           data.consents.map((c, i) => (

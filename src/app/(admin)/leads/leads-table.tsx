@@ -54,29 +54,12 @@ export function LeadsTable({
   }
 
   return (
-    <div className="card" style={{ overflowX: "auto", padding: 0 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+    <div className="table-wrap">
+      <table className="table">
         <thead>
           <tr>
             {["Contact", "Campaign", "Status", "Consent", "Intent", "Attempts", "Next call", ""].map(
-              (h) => (
-                <th
-                  key={h}
-                  style={{
-                    textAlign: "left",
-                    padding: "10px 14px",
-                    color: "var(--muted)",
-                    fontWeight: 500,
-                    fontSize: 11,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.06em",
-                    borderBottom: "1px solid var(--border)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {h}
-                </th>
-              ),
+              (h) => <th key={h}>{h}</th>,
             )}
           </tr>
         </thead>
@@ -84,31 +67,31 @@ export function LeadsTable({
           {leads.map((lead) => {
             const shown = revealed[lead.id];
             return (
-              <tr key={lead.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                <td style={cell}>
-                  <div style={{ fontFamily: "ui-monospace, monospace" }}>
+              <tr key={lead.id}>
+                <td>
+                  <div className="mono">
                     {shown?.phone ?? (lead.phoneLast4 ? `******${lead.phoneLast4}` : "—")}
                   </div>
                   {shown?.email ? (
-                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{shown.email}</div>
+                    <div className="sub">{shown.email}</div>
                   ) : null}
                 </td>
-                <td style={cell}>{lead.campaignName ?? "—"}</td>
-                <td style={cell}>
+                <td>{lead.campaignName ?? "—"}</td>
+                <td>
                   <span className={`pill ${statusTone(lead.status)}`}>{lead.status}</span>
                   {lead.statusReason ? (
-                    <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 3 }}>
+                    <div className="sub">
                       {lead.statusReason}
                     </div>
                   ) : null}
                 </td>
-                <td style={cell}>
-                  {/* PRD 26.1: a lead cannot be queued without an active consent record. */}
+                <td>
+                  {/* A lead cannot be queued without an active consent record. */}
                   <span className={`pill ${lead.hasConsent ? "ok" : "warn"}`}>
                     {lead.hasConsent ? "active" : "none"}
                   </span>
                 </td>
-                <td style={cell}>
+                <td>
                   {lead.intent ? (
                     <>
                       <span className="pill">{lead.intent}</span>
@@ -120,17 +103,16 @@ export function LeadsTable({
                     "—"
                   )}
                 </td>
-                <td style={cell}>{lead.attempts}</td>
-                <td style={cell}>
+                <td>{lead.attempts}</td>
+                <td className="nowrap">
                   {lead.nextCallAt ? new Date(lead.nextCallAt).toLocaleString() : "—"}
                 </td>
-                <td style={cell}>
+                <td>
                   {canReveal && !shown ? (
                     <button
-                      className="ghost"
+                      className="ghost sm"
                       disabled={busyId === lead.id}
                       onClick={() => void reveal(lead.id)}
-                      style={{ padding: "4px 9px", fontSize: 12 }}
                     >
                       {busyId === lead.id ? "..." : "Reveal"}
                     </button>
@@ -144,8 +126,6 @@ export function LeadsTable({
     </div>
   );
 }
-
-const cell: React.CSSProperties = { padding: "10px 14px", verticalAlign: "top" };
 
 function statusTone(status: string): string {
   if (status === "qualified") return "ok";

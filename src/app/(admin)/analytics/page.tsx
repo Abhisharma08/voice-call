@@ -73,7 +73,7 @@ export default async function AnalyticsPage({
   return (
     <>
       <h1 className="page-title">Analytics</h1>
-      <p className="page-sub">Operational and AI metrics for the selected client (PRD 21).</p>
+      <p className="page-sub">Operational, AI and commercial metrics for the selected client.</p>
 
       <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {(Object.keys(WINDOWS) as WindowKey[]).map((key) => (
@@ -88,7 +88,7 @@ export default async function AnalyticsPage({
         ))}
       </div>
 
-      <h2 style={heading}>Operational</h2>
+      <h2 className="section">Operational</h2>
       <div className="grid">
         <Stat title="Leads" value={String(n(m.leads))} note="All statuses" />
         <Stat title="Call attempts" value={String(attempts)} note="Including retries" />
@@ -96,7 +96,7 @@ export default async function AnalyticsPage({
         <Stat
           title="Lead-to-call p95"
           value={m.p95_latency_sec ? `${m.p95_latency_sec}s` : "—"}
-          note="G2 target: under 30s"
+          note="Target: under 30s"
         />
         <Stat
           title="Avg call duration"
@@ -110,7 +110,7 @@ export default async function AnalyticsPage({
         />
       </div>
 
-      <h2 style={heading}>AI performance</h2>
+      <h2 className="section">AI performance</h2>
       <p style={sub}>
         How reliably the model produces a usable result &mdash; not whether the leads are good.
       </p>
@@ -123,7 +123,7 @@ export default async function AnalyticsPage({
         <Stat
           title="Held for review"
           value={pct(n(m.pending_review) + n(m.reviewed), analyses)}
-          note="Share that needed a human (PRD 26.3)"
+          note="Share that needed a human"
         />
         <Stat
           title="Correction rate"
@@ -133,7 +133,7 @@ export default async function AnalyticsPage({
         <Stat title="Avg score" value={m.avg_score ?? "—"} note="Across all analyses" />
       </div>
 
-      <h2 style={heading}>Commercial outcome</h2>
+      <h2 className="section">Commercial outcome</h2>
       <div className="grid">
         <Stat title="Hot rate" value={pct(n(m.hot), connected)} note="hot / connected calls" />
         <Stat
@@ -153,10 +153,9 @@ export default async function AnalyticsPage({
           Not yet measurable
         </h3>
         <p style={{ margin: "6px 0 0", fontSize: 12, color: "var(--muted)" }}>
-          Cost per qualified lead needs the voice provider&rsquo;s per-minute rate, which arrives with a
-          real provider adapter. Human follow-up SLA (sales acknowledgement minus hot result) needs the
-          notification transport from PRD 16. Lead conversion needs the client&rsquo;s own won/lost
-          outcome back from HubSpot.
+          Cost per qualified lead needs the voice provider&rsquo;s per-minute rate. Follow-up speed needs
+          sales to acknowledge a hot lead somewhere we can see. Conversion needs won/lost outcomes back
+          from HubSpot.
         </p>
       </div>
     </>
@@ -173,5 +172,4 @@ function Stat({ title, value, note }: { title: string; value: string; note: stri
   );
 }
 
-const heading: React.CSSProperties = { fontSize: 14, margin: "22px 0 8px", fontWeight: 600 };
 const sub: React.CSSProperties = { margin: "0 0 10px", color: "var(--muted)", fontSize: 12 };

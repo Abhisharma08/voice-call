@@ -176,7 +176,7 @@ function ReviewCard({
         </>
       ) : (
         <p className="note" style={{ color: "var(--muted)", fontSize: 12 }}>
-          Read-only. Resolving is an Operations Manager action (PRD 4).
+          Read-only. Only an Operations Manager can resolve these.
         </p>
       )}
     </div>

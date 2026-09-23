@@ -60,7 +60,7 @@ export function CampaignEditor({
 
   return (
     <div className="stack" style={{ marginTop: 16 }}>
-      <Section title="Agent" hint="What the AI says, and the context it may rely on (PRD 10.1).">
+      <Section title="Agent" hint="What the AI says, and the context it may rely on.">
         <Field label="Opening script">
           <textarea
             rows={3}
@@ -72,7 +72,7 @@ export function CampaignEditor({
         </Field>
         <Field
           label="Business context"
-          hint="Grounds the model. PRD 10.2: it must never invent pricing, availability or policy terms."
+          hint="Grounds the model. It must never invent pricing, availability or policy terms."
         >
           <textarea
             rows={3}
@@ -110,7 +110,7 @@ export function CampaignEditor({
 
       <Section
         title="Qualification questions"
-        hint="Field names are the keys the model must return. A required field left unanswered sends the result to review (PRD 26.3)."
+        hint="Field names are the keys the model must return. A required field left unanswered sends the result to review."
       >
         <QuestionEditor
           questions={config.questions}
@@ -121,7 +121,7 @@ export function CampaignEditor({
 
       <Section
         title="Scoring rubric"
-        hint="PRD 11.2. Applied in code to the model's extracted fields, so a score is always reproducible."
+        hint="Applied in code to the model's answers, so a score is always reproducible."
       >
         <div className="row" style={{ flexWrap: "wrap", gap: 10 }}>
           {(Object.keys(config.scoringRubric) as Array<keyof typeof config.scoringRubric>).map((k) => (
@@ -140,7 +140,7 @@ export function CampaignEditor({
         </div>
       </Section>
 
-      <Section title="Routing and review" hint="PRD 11.3 thresholds and the PRD 26.3 review gate.">
+      <Section title="Routing and review" hint="Score thresholds, and when a result waits for a person.">
         <Row>
           <Field label="Hot threshold" narrow>
             <input
@@ -197,7 +197,7 @@ export function CampaignEditor({
 
       <Section
         title="Calling window and retries"
-        hint="Times are in the campaign timezone, not the server's (FR-021)."
+        hint="Times are in the campaign timezone, not the server's."
       >
         <Row>
           <Field label="Timezone">
@@ -291,7 +291,7 @@ export function CampaignEditor({
         </Row>
       </Section>
 
-      <Section title="Destinations" hint="Where results are written (FR-004, FR-041, FR-042).">
+      <Section title="Destinations" hint="Where results are written.">
         <Row>
           <Field label="Google Sheet ID">
             <input
@@ -466,12 +466,12 @@ export function CampaignEditor({
         </div>
       ) : (
         <p className="note" style={{ color: "var(--muted)", fontSize: 12 }}>
-          Read-only. Editing a campaign is a Campaign Manager action (PRD 4).
+          Read-only. Only a Campaign Manager can edit a campaign.
         </p>
       )}
 
       {versions.length > 0 ? (
-        <Section title="Version history" hint="PRD 9: each call records the config version it ran under.">
+        <Section title="Version history" hint="Each call records the version it ran under.">
           <div className="stack" style={{ gap: 4 }}>
             {versions.map((v) => (
               <div key={v.version} className="row" style={{ fontSize: 12, gap: 8 }}>

@@ -122,42 +122,40 @@ export default async function AuditPage({
       {events.length === 0 ? (
         <div className="empty">No events recorded for this filter.</div>
       ) : (
-        <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+        <div className="table-wrap">
+          <table className="table dense">
             <thead>
               <tr>
                 {["When", "Action", "Actor", "Entity", "Detail"].map((h) => (
-                  <th key={h} style={th}>
-                    {h}
-                  </th>
+                  <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {events.map((e) => (
-                <tr key={e.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                  <td style={{ ...td, whiteSpace: "nowrap", color: "var(--muted)" }}>
+                <tr key={e.id}>
+                  <td className="nowrap" style={{ color: "var(--muted)" }}>
                     {e.created_at.toLocaleString()}
                   </td>
-                  <td style={td}>
+                  <td>
                     <span className={`pill ${tone(e.action)}`}>{e.action}</span>
                   </td>
-                  <td style={td}>
+                  <td>
                     {e.actor_label ?? e.actor_type}
-                    <div style={{ color: "var(--muted)", fontSize: 11 }}>
+                    <div className="sub">
                       {e.actor_type}
                       {e.ip ? ` · ${e.ip}` : ""}
                     </div>
                   </td>
-                  <td style={{ ...td, color: "var(--muted)" }}>
+                  <td style={{ color: "var(--muted)" }}>
                     {e.entity_type}
                     {e.entity_id ? (
-                      <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 11 }}>
+                      <div className="mono" style={{ fontSize: 11 }}>
                         {e.entity_id.slice(0, 8)}
                       </div>
                     ) : null}
                   </td>
-                  <td style={{ ...td, maxWidth: 420 }}>
+                  <td style={{ maxWidth: 420 }}>
                     <code style={{ fontSize: 11, color: "var(--muted)", wordBreak: "break-word" }}>
                       {summarise(e.metadata)}
                     </code>
@@ -188,16 +186,3 @@ function summarise(metadata: Record<string, unknown>): string {
     .join("  ")
     .slice(0, 300);
 }
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: "9px 12px",
-  color: "var(--muted)",
-  fontWeight: 500,
-  fontSize: 11,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  borderBottom: "1px solid var(--border)",
-};
-
-const td: React.CSSProperties = { padding: "9px 12px", verticalAlign: "top" };

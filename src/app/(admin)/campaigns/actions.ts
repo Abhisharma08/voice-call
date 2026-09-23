@@ -164,7 +164,7 @@ export async function approveCompliance(formData: FormData): Promise<ActionResul
 
     if (r.rowCount === 0) {
       return failure(
-        "Record the consent basis for this client's lead list before approving (PRD 14.3 step 10)",
+        "Record the consent basis for this client's lead list before approving",
       );
     }
 
