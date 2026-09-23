@@ -431,6 +431,12 @@ export const callbacks = pgTable("callbacks", {
   requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().default(now),
   scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
   status: callbackStatus("status").notNull().default("scheduled"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  resolvedBy: uuid("resolved_by").references(() => users.id),
+  fulfilledCallId: uuid("fulfilled_call_id").references(() => callAttempts.id, {
+    onDelete: "set null",
+  }),
+  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(now),
 });
 

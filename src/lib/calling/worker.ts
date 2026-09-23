@@ -4,6 +4,7 @@ import { backoffDelayMs } from "@/lib/calling/retry";
 import { resolveProvider } from "@/lib/providers/voice";
 import { ProviderError } from "@/lib/providers/voice/types";
 import { auditInTx } from "@/lib/audit";
+import { fulfilCallbacksForLead } from "@/lib/calling/callbacks";
 
 /**
  * The calling worker (n8n workflow W02, steps 4-6).
@@ -149,6 +150,15 @@ async function dialOne(
     `update leads set call_attempt_count = $2, last_call_at = now() where id = $1`,
     [lead.leadId, lead.attemptNo],
   );
+
+  // A callback the lead asked for is kept the moment the call goes out, not
+  // when it connects. The promise was to call back; the retry ladder owns what
+  // happens if nobody picks up.
+  await fulfilCallbacksForLead(tx, {
+    tenantId: lead.tenantId,
+    leadId: lead.leadId,
+    callId,
+  });
 
   try {
     const provider = resolveProvider(lead.provider);

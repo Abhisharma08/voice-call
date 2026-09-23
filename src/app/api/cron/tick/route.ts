@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { withScope, withoutScope } from "@/db/client";
 import { dispatchDial } from "@/lib/calling/dispatch";
 import { drainSyncOutbox } from "@/lib/integrations/sync-worker";
+import { markMissedCallbacks } from "@/lib/calling/callbacks";
 import { logger } from "@/lib/observability/log";
 
 export const runtime = "nodejs";
@@ -21,7 +22,8 @@ export const dynamic = "force-dynamic";
  *   - retries on the backoff ladder, which come due minutes or hours later
  *     (PRD 18.2)
  *   - leads queued outside the calling window, released when it opens (FR-021)
- *   - callbacks a lead asked for at a specific time
+ *   - callbacks a lead asked for at a specific time, and marking the ones
+ *     nobody kept
  *   - leads stranded by an invocation that died mid-call, reclaimed on lock
  *     expiry
  *   - the sync outbox, so a HubSpot or Sheets outage clears itself once the
@@ -109,6 +111,11 @@ async function handle(request: NextRequest) {
     // table would otherwise accumulate a row per distinct client address
     // forever. Last in the pass and deliberately best-effort: a failed sweep
     // of a housekeeping table must not fail a pass that already placed calls.
+    // A callback whose time came and went without a call is the operator's to
+    // chase, and they can only chase what the platform admits to. Before the
+    // housekeeping, because it is real work rather than tidying.
+    const callbacksMissed = await sweepMissedCallbacks();
+
     const rateLimitRowsCleared = await gcRateLimits();
 
     const summary = {
@@ -118,6 +125,7 @@ async function handle(request: NextRequest) {
       calls_failed: dialled.reduce((n, d) => n + d.failed, 0),
       outbox_processed: synced.reduce((n, s) => n + s.processed, 0),
       outbox_failed: synced.reduce((n, s) => n + s.failed, 0),
+      callbacks_missed: callbacksMissed,
       rate_limit_rows_cleared: rateLimitRowsCleared,
       duration_ms: Date.now() - started,
     };
@@ -125,7 +133,12 @@ async function handle(request: NextRequest) {
     // One line per pass, and only when it did something. A cron running every
     // minute writes 1,440 lines a day; making the quiet ones silent is what
     // keeps the log worth reading.
-    if (summary.calls_placed || summary.calls_failed || summary.outbox_processed) {
+    if (
+      summary.calls_placed ||
+      summary.calls_failed ||
+      summary.outbox_processed ||
+      summary.callbacks_missed
+    ) {
       logger.info("cron sweep", {
         ...summary,
       });
@@ -137,6 +150,32 @@ async function handle(request: NextRequest) {
       err: err instanceof Error ? err.message : String(err),
     });
     return NextResponse.json({ error: "Sweep failed" }, { status: 500 });
+  }
+}
+
+/**
+ * Mark callbacks whose requested time has passed with no call behind it.
+ *
+ * One global-scope pass rather than a loop per tenant: the predicate is the
+ * same everywhere, the rows name their own tenant, and a client with no
+ * callbacks costs a row count of zero rather than a round trip.
+ *
+ * Swallows its own errors for the same reason `gcRateLimits` does - a sweep
+ * that has already placed calls must not report failure because a bookkeeping
+ * update could not take a lock.
+ */
+async function sweepMissedCallbacks(): Promise<number> {
+  try {
+    return await withScope(
+      { tenantId: null, globalScope: true, actorId: null, actorType: "service" },
+      async (tx) => (await markMissedCallbacks(tx)).length,
+      "service",
+    );
+  } catch (err) {
+    logger.error("missed-callback sweep failed; sweep otherwise succeeded", {
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return 0;
   }
 }
 

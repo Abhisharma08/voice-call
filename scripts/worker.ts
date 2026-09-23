@@ -40,6 +40,7 @@ interface Sweep {
   calls_failed?: number;
   outbox_processed?: number;
   outbox_failed?: number;
+  callbacks_missed?: number;
   duration_ms?: number;
 }
 
@@ -67,7 +68,10 @@ async function tick(): Promise<void> {
 
   const sweep = body as Sweep;
   const did =
-    (sweep.calls_placed ?? 0) + (sweep.calls_failed ?? 0) + (sweep.outbox_processed ?? 0);
+    (sweep.calls_placed ?? 0) +
+    (sweep.calls_failed ?? 0) +
+    (sweep.outbox_processed ?? 0) +
+    (sweep.callbacks_missed ?? 0);
 
   // Silent when there was nothing to do: a line every minute saying "0" trains
   // you to stop reading the log.
@@ -75,7 +79,8 @@ async function tick(): Promise<void> {
 
   console.log(
     `  ${stamp()}  ${sweep.calls_placed ?? 0} placed, ${sweep.calls_failed ?? 0} failed, ` +
-      `${sweep.outbox_processed ?? 0} synced across ${sweep.campaigns ?? 0} campaign(s)`,
+      `${sweep.outbox_processed ?? 0} synced across ${sweep.campaigns ?? 0} campaign(s)` +
+      (sweep.callbacks_missed ? `, ${sweep.callbacks_missed} callback(s) missed` : ""),
   );
 }
 
