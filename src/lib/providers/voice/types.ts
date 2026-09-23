@@ -1,12 +1,11 @@
 /**
- * Voice provider abstraction (PRD 10.4).
+ * Voice provider abstraction.
  *
- * "Implement a provider adapter so the core platform is not coupled to a
- * single telecom or AI vendor. Provider contract should expose: create_call,
- * get_call_status, handle_webhook, retrieve_recording_or_transcript, hangup,
- * and provider_metadata."
+ * An adapter, so the core platform is not coupled to a single telecom or AI
+ * vendor. The contract is create_call, get_call_status, handle_webhook,
+ * retrieve_recording_or_transcript, hangup and provider_metadata.
  *
- * This matters commercially, not just architecturally: PRD 17.3 notes that
+ * This matters commercially, not just architecturally:
  * India outbound restrictions make provider selection a compliance decision.
  * A regional provider has to be swappable without touching the calling worker.
  */
@@ -72,7 +71,7 @@ export interface NormalizedWebhook {
    *
    * This is distinct from a failed call. The retry ladder would otherwise
    * treat "registered under TRAI NDNC" as a transient failure and dial again,
-   * which is both futile and a regulatory problem (PRD 17.4, 17.3). An adapter
+   * which is both futile and a regulatory problem. An adapter
    * sets this when it recognises such a reason; the platform turns it into a
    * permanent suppression.
    */

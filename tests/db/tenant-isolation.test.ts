@@ -4,9 +4,9 @@ import { closePools, withActorScope, withScope, withoutScope } from "@/db/client
 import { encryptPii } from "@/lib/crypto/pii";
 
 /**
- * PRD 19 requires 100% authorization test coverage on tenant boundaries, and
- * PRD 23.3 lists "Cross-tenant URL manipulation -> 403/404; no data
- * disclosure" as an acceptance scenario.
+ * Tenant boundaries need complete authorization test coverage, and
+ * cross-tenant URL manipulation must yield a 403 or 404 with no data
+ * disclosure.
  *
  * These tests go one level below the HTTP layer: they connect as the runtime
  * role and try to read across tenants directly in SQL. If RLS is doing its
@@ -69,7 +69,7 @@ afterAll(async () => {
 const scopeA = { tenantId: TENANT_A, globalScope: false, actorId: USER_A, actorType: "user" as const };
 const scopeB = { tenantId: TENANT_B, globalScope: false, actorId: USER_A, actorType: "user" as const };
 
-describe("row-level security (PRD 8.2, FR-005)", () => {
+describe("row-level security", () => {
   it("shows only the scoped tenant's leads", async () => {
     const rows = await withScope(scopeA, async (tx) => (await tx.query(`select phone_last4 from leads`)).rows);
     expect(rows).toHaveLength(1);
@@ -184,7 +184,7 @@ describe("row-level security (PRD 8.2, FR-005)", () => {
   });
 });
 
-describe("assignments and elevations (PRD 8.2)", () => {
+describe("assignments and elevations", () => {
   it("lets a user read their own assignments without a tenant scope", async () => {
     const rows = await withActorScope(USER_A, async (tx) =>
       (await tx.query(`select tenant_id from user_tenant_assignments where user_id = $1`, [USER_A])).rows,
@@ -201,7 +201,7 @@ describe("assignments and elevations (PRD 8.2)", () => {
   });
 });
 
-describe("audit trail is append-only (PRD 17.1)", () => {
+describe("audit trail is append-only", () => {
   it("allows inserts", async () => {
     await withScope(scopeA, async (tx) => {
       await tx.query(

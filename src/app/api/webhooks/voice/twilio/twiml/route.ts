@@ -154,8 +154,8 @@ const CLOSING = "Thank you for your time. Someone will follow up shortly. Goodby
  * Append one turn to the call's transcript.
  *
  * Read-modify-write on an encrypted column rather than a turns table: the
- * transcript is one row per call (PRD 12), turns arrive strictly in order on a
- * single call leg, and a call has a handful of them. PRD 26.2 keeps it
+ * transcript is one row per call, turns arrive strictly in order on a
+ * single call leg, and a call has a handful of them. Sensitivity keeps it
  * encrypted at the application layer either way.
  */
 async function appendTurn(

@@ -8,11 +8,11 @@ import { TenantStatusControl } from "./tenant-status-control";
 export const dynamic = "force-dynamic";
 
 /**
- * Client accounts (PRD 14.2 "Client health", 14.3 onboarding).
+ * Client accounts: health and onboarding.
  *
- * Clients never log in (PRD 14.3), so this is an agency-internal roster, not a
+ * Clients never log in, so this is an agency-internal roster, not a
  * customer-facing account area. The list is built from the caller's own
- * assignments, so a Campaign Manager sees only their clients (PRD 8.2).
+ * assignments, so a Campaign Manager sees only their clients.
  */
 export default async function ClientsPage() {
   const user = await requireUser();

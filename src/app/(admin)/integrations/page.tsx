@@ -12,9 +12,9 @@ import { DeadLetters, type DeadLetter } from "./dead-letters";
 export const dynamic = "force-dynamic";
 
 /**
- * Per-tenant integration credentials (PRD 13, PRD 22 Phase 2).
+ * Per-tenant integration credentials.
  *
- * The credential itself is never selected here. PRD 17.1 says to store only
+ * The credential itself is never selected here. The database stores only
  * secret references, and the corollary is that the UI has nothing to show: a
  * credential is write-only from the moment it is sealed. What an operator
  * actually needs to know is whether it still works, which is what the status
@@ -70,13 +70,13 @@ export default async function IntegrationsPage() {
     );
 
     /**
-     * Deliveries that exhausted their retries (PRD 18.3). Joined out to the
+     * Deliveries that exhausted their retries. Joined out to the
      * call so a row reads as "this client's lead did not reach their CRM"
      * rather than as an opaque outbox id - which is the difference between a
      * panel an operator acts on and one they scroll past.
      *
      * `phone_last4` only: the full number is encrypted and requires an audited
-     * reveal (PRD 26.2), and identifying a stuck row does not need it.
+     * reveal, and identifying a stuck row does not need it.
      */
     const dead = await tx.query<{
       id: string;
@@ -179,7 +179,7 @@ export default async function IntegrationsPage() {
                   carry, and neither failure is visible from the outside: an
                   event for an unknown portal, and one whose signature cannot
                   be checked, are both answered exactly like a forged one
-                  (PRD 23.3). Said here instead, where it can be fixed. */}
+. Said here instead, where it can be fixed. */}
               {i.type === "hubspot" && !i.hubspot_portal_id ? (
                 <div style={{ fontSize: 12, color: "var(--warn, #d08b2c)" }}>
                   No portal id: HubSpot could not be asked which account this token belongs to, so
@@ -194,7 +194,7 @@ export default async function IntegrationsPage() {
                 </div>
               ) : null}
 
-              {/* PRD 18.2: an auth failure disables the integration rather than
+              {/* An auth failure disables the integration rather than
                   retrying into a rate limit. Surfacing the error is how it gets
                   fixed. */}
               {i.last_error ? (

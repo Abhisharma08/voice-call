@@ -4,11 +4,11 @@ import { withScope, withoutScope, type TenantScope } from "@/db/client";
 import { recordUnscopedAudit } from "@/lib/audit";
 
 /**
- * Service identities for n8n workers (PRD 4: "Service identity only", PRD 9).
+ * Service identities for n8n workers. A service identity only, never a human.
  *
  * A worker token is bound to exactly one tenant at issue time. That is the
- * whole point: PRD 8.2 says "No workflow or API endpoint may accept an
- * arbitrary tenant_id from a public client and trust it as authorization", so
+ * whole point: no workflow or API endpoint may accept an
+ * arbitrary tenant_id from a public client and trust it as authorization, so
  * the tenant comes from the credential, never from the request body - even
  * though the caller is our own automation.
  */

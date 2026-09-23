@@ -8,7 +8,7 @@ import { analyzeTranscript } from "@/lib/qualification/analyze";
 import { QualificationSchema } from "@/lib/qualification/schema";
 
 /**
- * The analysis provider registry (PRD 10.4's reasoning applied to the model,
+ * The analysis provider registry (the reasoning applied to the model,
  * not the carrier). No network: resolution, schema conversion, and the rule
  * that a misconfigured campaign degrades to review rather than failing loudly
  * at the caller.
@@ -47,7 +47,7 @@ describe("analysis provider registry", () => {
   });
 });
 
-describe("an unresolvable model degrades to review (PRD 18.2)", () => {
+describe("an unresolvable model degrades to review", () => {
   it("returns the unknown fallback rather than throwing at the caller", async () => {
     const response = await analyzeTranscript({
       transcript: "Agent: Hello. Lead: Not now, thanks.",
@@ -74,7 +74,7 @@ describe("an unresolvable model degrades to review (PRD 18.2)", () => {
       callDurationSec: null,
     });
 
-    // Billing metrics (PRD 21) must not count tokens nobody spent.
+    // Billing metrics must not count tokens nobody spent.
     expect(response.inputTokens).toBeNull();
     expect(response.outputTokens).toBeNull();
   });
@@ -93,7 +93,7 @@ describe("Gemini structured output schema", () => {
   });
 
   it("expresses nullable fields as a type union, the form the API accepts", () => {
-    // FR-032: a field the lead never addressed must be expressible as null,
+    // A field the lead never addressed must be expressible as null,
     // or the model has no way to say "not stated" except by inventing one.
     expect(schema.properties.budget?.type).toEqual(["string", "null"]);
     expect(schema.properties.still_interested?.type).toEqual(["boolean", "null"]);

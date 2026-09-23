@@ -15,7 +15,7 @@ function scryptAsync(
 }
 
 /**
- * Password hashing for agency staff accounts (PRD 4: clients never log in).
+ * Password hashing for agency staff accounts (clients never log in).
  *
  * scrypt from Node's standard library, so there is no native build step in CI
  * or on deploy. Parameters follow the memory-hard end of current guidance;

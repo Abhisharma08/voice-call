@@ -7,7 +7,7 @@
  * cannot be relied on to do.
  *
  * **Redaction.** A log line is the easiest way for a phone number or a lead's
- * name to leave the encrypted column it was carefully put into (PRD 26.2).
+ * name to leave the encrypted column it was carefully put into.
  * Every value passed here goes through `redact()`, so a field that should
  * never have been logged is dropped by the logger rather than by the author
  * remembering.

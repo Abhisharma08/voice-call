@@ -9,8 +9,8 @@ import { logger } from "@/lib/observability/log";
 /**
  * The single path every configuration write takes.
  *
- * PRD 17.1 requires configuration changes, manual suppression, routing changes
- * and data exports to be audited. Rather than trusting each form handler to
+ * Configuration changes, manual suppression, routing changes
+ * and data exports are all audited. Rather than trusting each form handler to
  * remember, these wrappers make the permission check and the audit row
  * structural: you cannot get a transaction without naming the permission it
  * needs, and the audit row is written inside that same transaction, so it
@@ -49,7 +49,7 @@ export interface ActionContext {
  * verifies the tenant grant, and opens an RLS-scoped transaction.
  *
  * `tenantId` arriving from a form is a *request* to act inside that tenant;
- * `withTenant` decides whether it is allowed (PRD 8.2) and logs a denial.
+ * `withTenant` decides whether it is allowed and logs a denial.
  */
 export async function tenantAction<T>(
   args: { tenantId: string; permission: Permission },
@@ -114,7 +114,7 @@ export async function globalAction<T>(
 }
 
 function translate(err: unknown): ActionResult<never> {
-  // PRD 23.3: a tenant the caller may not reach is indistinguishable from one
+  // A tenant the caller may not reach is indistinguishable from one
   // that does not exist.
   if (err instanceof TenantAccessError) return failure("Not found");
   if (err instanceof AuthorizationError) return failure("Not authorized");
@@ -125,7 +125,7 @@ function translate(err: unknown): ActionResult<never> {
   // leaking SQL. These constraints exist for reasons the operator should see.
   if (message.includes("campaigns_compliance_needs_consent_ck")) {
     return failure(
-      "Record the consent basis for this client's lead list before approving the campaign (PRD 14.3, 26.1)",
+      "Record the consent basis for this client's lead list before approving the campaign",
       "consentBasis",
     );
   }

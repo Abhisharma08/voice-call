@@ -214,7 +214,7 @@ describe("createCall", () => {
     );
   });
 
-  it("classifies auth as permanent and 5xx as retryable (PRD 18.2)", async () => {
+  it("classifies auth as permanent and 5xx as retryable", async () => {
     const unauthorized = new TwilioVoiceProvider(config, stubFetch(() => json({}, 401)).impl);
     await expect(unauthorized.createCall(callRequest)).rejects.toMatchObject({ retryable: false });
 

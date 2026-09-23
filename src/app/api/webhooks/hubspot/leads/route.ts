@@ -30,7 +30,7 @@ export const maxDuration = 60;
  *
  * Everything that makes intake safe is unchanged, because this is a mapping in
  * front of the same function: the tenant comes from the service credential
- * (PRD 8.2), the idempotency key is tenant + source event id (PRD 18.1), and
+ *, the idempotency key is tenant + source event id, and
  * `ingestLead` still owns dedupe, phone normalisation, consent and the DNC
  * gate.
  *
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
       return out;
     });
 
-    // Dial what was just queued, after the response goes back (FR-020, G2:
+    // Dial what was just queued, after the response goes back (target:
     // p95 under 30 seconds from ingestion). A replay dials nothing - HubSpot
     // retries, and the leads it names are already in flight.
     const toDial = campaignsToDial(

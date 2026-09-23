@@ -21,14 +21,14 @@ import type {
  *      predictable here than under Anthropic's explicit cache_control.
  *
  *   2. `store` defaults to true, which retains the interaction server-side.
- *      Transcripts are the most sensitive text this platform handles - PRD
+ *      Transcripts are the most sensitive text this platform handles - the
  *      26.2 keeps them encrypted and access-logged - so this adapter turns it
  *      off explicitly. Do not remove that without a compliance decision.
  *
  *   3. Structured output is a JSON Schema on the request, not a Zod binding,
  *      and the model returns text. So the schema is converted here and the
  *      response is validated with the same Zod schema the Anthropic path uses,
- *      which keeps FR-031 ("schema validation passes before persistence") true
+ *      which keeps schema validation passing before persistence
  *      for both providers rather than trusting either model's own conformance.
  */
 
@@ -116,7 +116,7 @@ export class GeminiAnalysisProvider implements AnalysisProvider {
       model: (interaction as { model?: string }).model ?? request.model,
       inputTokens: tokenCount(usage, "total_input_tokens", "input_tokens", "promptTokenCount"),
       // Thinking tokens are billed as output, so a total that excludes them
-      // would understate cost in the PRD 21 metrics.
+      // would understate cost in the analytics metrics.
       outputTokens: sumOutputTokens(usage),
     };
   }
@@ -135,7 +135,7 @@ export class GeminiAnalysisProvider implements AnalysisProvider {
 
 /**
  * The model returns text even under a response schema, so this is where
- * FR-031 is actually enforced. A parse failure returns null, which the caller
+ * Schema validation is actually enforced. A parse failure returns null, which the caller
  * turns into a degraded result held for review - never a partial object.
  */
 function parseOutput(text: string): AnalysisResult["parsed"] {

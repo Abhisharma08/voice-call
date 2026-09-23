@@ -1,11 +1,11 @@
 /**
  * Role-based access control.
  *
- * Roles come from PRD 4 (Personas & Users). Two things shape this model:
+ * Five roles, and two things shape the model:
  *
- *  1. Clients never log in (PRD 14.3). Every account here is agency staff or a
+ *  1. Clients never log in. Every account here is agency staff or a
  *     service identity, so there is no "client admin" role.
- *  2. PRD 8.2: agency staff are scoped to their assigned tenants *by default*.
+ *  2. Agency staff are scoped to their assigned tenants *by default*.
  *     Being an employee of the agency is not itself authorisation to open a
  *     given client's leads. Only Agency Admin holds global scope; everyone
  *     else needs an assignment or a logged elevation.
@@ -42,7 +42,7 @@ export const PERMISSIONS = [
   "review:resolve",
   "callback:write",
   "dnc:write",
-  // Sensitive reads, each one audited (PRD 26.2)
+  // Sensitive reads, each one audited
   "pii:reveal",
   "transcript:read",
   "recording:read",
@@ -78,7 +78,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "lead:read",
     "lead:write",
     "call:read",
-    // PRD 4: the Operations Manager owns the human-review queue (PRD 26.3)
+    // The Operations Manager owns the human-review queue
     "review:read",
     "review:resolve",
     "callback:write",
@@ -91,7 +91,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
 
   analyst: ["tenant:read", "campaign:read", "lead:read", "call:read", "analytics:read"],
 
-  // PRD 4: "Service identity only" - workflows, never a human surface.
+  // "Service identity only" - workflows, never a human surface.
   service: ["lead:read", "lead:write", "call:read", "callback:write", "dnc:write"],
 };
 
@@ -113,7 +113,7 @@ export class AuthorizationError extends Error {
     readonly permission: Permission,
     readonly role: Role,
   ) {
-    // Deliberately vague: PRD 23.3 wants cross-tenant probing to yield no
+    // Deliberately vague: cross-tenant probing should yield no
     // information about what exists.
     super("Not authorized");
     this.name = "AuthorizationError";

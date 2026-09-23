@@ -1,6 +1,6 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0002 — Row-Level Security. PRD 8.2, FR-005, 23.3 "Cross-tenant URL
--- manipulation → 403/404; no data disclosure".
+-- 0002 — Row-Level Security. Cross-tenant URL manipulation must yield a
+-- 403 or 404 and disclose no data.
 --
 -- Every tenant-scoped table gets the same policy: a row is visible only when
 -- app.tenant_visible(tenant_id) is true, which requires either an exact match
@@ -57,7 +57,7 @@ create policy tenant_isolation on tenants
   with check (app.has_global_scope());   -- only a global-scope actor creates tenants
 
 -- ── Identity tables are agency-level, not tenant-scoped ───────────────────
--- A user is agency staff (PRD 4, 14.3). Restrict by role in the app layer;
+-- A user is agency staff. Restrict by role in the app layer;
 -- RLS here only prevents a tenant-scoped session from enumerating staff of
 -- other assignments.
 alter table users enable row level security;

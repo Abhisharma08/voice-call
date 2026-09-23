@@ -19,7 +19,7 @@ import { logger } from "@/lib/observability/log";
 export const runtime = "nodejs";
 
 /**
- * Voice provider callbacks (W02 step 6, FR-023).
+ * Voice provider callbacks (W02 step 6).
  *
  * Two authentication paths, because carriers and API providers differ:
  *
@@ -32,8 +32,8 @@ export const runtime = "nodejs";
  *   which is where its tenant comes from.
  *
  * Either way the adapter verifies first and normalises second, so nothing
- * vendor-specific reaches the platform. PRD 18.2: "Webhook signature invalid -
- * No - Reject + security log."
+ * vendor-specific reaches the platform. An invalid signature is rejected and
+ * logged as a security event, never processed.
  */
 export async function POST(
   request: NextRequest,
@@ -218,7 +218,7 @@ async function process(providerName: string, tenantId: string, webhook: Normaliz
   };
 
   const run = async (tx: Parameters<Parameters<typeof withScope>[1]>[0]) => {
-    // PRD 18.1: call result idempotency key = provider + provider_call_id.
+    // Call result idempotency key = provider + provider_call_id.
     // The status is part of the key because a provider reports several
     // interim events per call, and each is a distinct fact.
     const idempotencyKey = `voice:${providerName}:${webhook.providerCallId}:${webhook.status}`;

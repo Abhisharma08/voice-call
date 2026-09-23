@@ -10,13 +10,13 @@ import { fulfilCallbacksForLead } from "@/lib/calling/callbacks";
  * The calling worker (n8n workflow W02, steps 4-6).
  *
  * n8n triggers this on a schedule; the durable state lives here in PostgreSQL,
- * per the PRD 9 engineering rule "Do not store call state only in n8n
- * execution history".
+ * per the rule that call state is never stored only in n8n execution
+ * history.
  *
  * The call_attempts row is written *before* the provider is asked to dial, so
  * a crash between the two leaves an auditable record of an attempt that may
- * have happened rather than a silent gap (G4: "every attempted call has a
- * durable call record").
+ * have happened rather than a silent gap: every attempted call has a durable
+ * call record.
  */
 
 export interface DialResult {
@@ -114,10 +114,10 @@ async function dialOne(
   webhookBaseUrl: string,
   workerId: string,
 ): Promise<DialResult> {
-  // Durable record first (PRD G4), so a provider timeout cannot lose the fact
+  // Durable record first, so a provider timeout cannot lose the fact
   // that we attempted this lead.
   const inserted = await tx.query<{ id: string }>(
-    // queue_latency_sec is the PRD 21 lead-to-call metric, computed here
+    // queue_latency_sec is the lead-to-call metric, computed here
     // rather than by joining every first attempt back to its lead when the
     // analytics page is opened (migration 0013). The value is known now and
     // never changes, so it is written once and read cheaply forever.
@@ -212,7 +212,7 @@ async function dialOne(
       [callId, detail],
     );
 
-    // PRD 18.2: transient provider failures go back on the queue with
+    // Transient provider failures go back on the queue with
     // exponential backoff; a permanent one drops the lead to failed.
     const requeueAt = retryable ? new Date(Date.now() + backoffDelayMs(lead.attemptNo)) : null;
     await releaseClaim(tx, lead.leadId, requeueAt);

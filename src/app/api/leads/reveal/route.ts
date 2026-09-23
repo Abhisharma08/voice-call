@@ -14,10 +14,10 @@ const Body = z.object({
 });
 
 /**
- * Reveal a lead's full phone number and email (PRD 26.2).
+ * Reveal a lead's full phone number and email.
  *
- * "Column-level encryption at rest; masked in list views, unmasked only on
- * explicit detail-view action." The reveal is a distinct, permissioned,
+ * Column-level encryption at rest, masked in list views, unmasked only on an
+ * explicit detail-view action. The reveal is a distinct, permissioned,
  * audited action rather than a field that happens to be on the page - so the
  * audit log answers "who looked at this person's number, and when".
  */

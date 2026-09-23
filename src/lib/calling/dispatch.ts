@@ -6,7 +6,7 @@ import { log, logger } from "@/lib/observability/log";
 /**
  * Dial the leads a request just queued, without making the caller wait.
  *
- * PRD G2 targets p95 under 30 seconds from CRM ingestion to dial. The queue
+ * The target is p95 under 30 seconds from CRM ingestion to dial. The queue
  * has always been able to deliver that - `next_call_at` is `now()` the moment
  * intake commits - but nothing asked it to. Something had to tick, and the
  * only thing that did was a scheduler running once a minute, which spends most

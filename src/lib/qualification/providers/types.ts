@@ -2,7 +2,7 @@ import type { QualificationResult } from "@/lib/qualification/schema";
 
 /**
  * The seam between "analyse this transcript" and whichever model does it
- * (PRD 10.4 applies the same reasoning to voice providers: the choice is
+ * (the same reasoning applies to voice providers: the choice is
  * configuration, not code).
  *
  * Everything provider-neutral - the prompt text, the schema, the degraded
@@ -27,7 +27,7 @@ export interface AnalysisRequest {
 export interface AnalysisResult {
   /**
    * null means the model answered but the answer did not satisfy the schema.
-   * That is a degraded result, not an exception: PRD 18.2 routes an "LLM
+   * That is a degraded result, not an exception: an LLM
    * schema failure" to manual review rather than losing the call.
    */
   parsed: QualificationResult | null;

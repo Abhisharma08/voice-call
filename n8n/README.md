@@ -11,16 +11,16 @@
 > | W03 qualification | nothing; the voice webhook qualifies a completed call inline |
 > | W04 retry/callback | `npm run worker` — the same timer |
 >
-> The reason that substitution is safe is PRD 9's own rule: durable state lives
+> The reason that substitution is safe is the own rule: durable state lives
 > in PostgreSQL, never in execution history. The queue claim is
 > `FOR UPDATE SKIP LOCKED` with a lock expiry and the endpoints are idempotent
 > on their own keys, so the scheduler is disposable — kill it, restart it, or
 > run two by accident and no call is lost or duplicated.
 
-Importable definitions for the four workflows in PRD 9. Import each JSON file
+Importable definitions for the four workflows. Import each JSON file
 into n8n, then set the two credentials/variables they expect.
 
-| File | PRD | Purpose |
+| File | Workflow | Purpose |
 | --- | --- | --- |
 | `W01-lead-intake.json` | 9 W01 | HubSpot new-lead event -> platform intake |
 | `W02-calling-worker.json` | 9 W02 | Scheduled tick that claims queued leads and dials |
@@ -29,7 +29,7 @@ into n8n, then set the two credentials/variables they expect.
 
 ## What n8n does and does not own
 
-n8n **orchestrates**; it does not hold state. PRD 9's engineering rules are
+n8n **orchestrates**; it does not hold state. The engineering rules are
 explicit: "Do not store call state only in n8n execution history; persist
 durable state in PostgreSQL." So each node here is a thin HTTP call into the
 platform, and the queue, locks, retry ladder, idempotency keys and outbox all
@@ -37,7 +37,7 @@ live in the database.
 
 That also means a workflow can be re-run, duplicated, or fail halfway without
 double-calling a lead - the endpoints are idempotent on their own keys
-(PRD 18.1), not on n8n's execution id.
+, not on n8n's execution id.
 
 ## Setup
 
@@ -46,7 +46,7 @@ double-calling a lead - the endpoints are idempotent on their own keys
    - Name: `Authorization`
    - Value: `Bearer svc_...` (from `npm run db:seed:phase1`, or an Agency Admin)
 
-   The token is bound to one tenant at issue time. PRD 8.2 forbids trusting a
+   The token is bound to one tenant at issue time. The platform never trusts a
    `tenant_id` supplied by a caller, so these workflows never send one - the
    platform derives it from the credential. A second client means a second
    token, not an extra field.
@@ -54,7 +54,7 @@ double-calling a lead - the endpoints are idempotent on their own keys
 2. **Variables** - set `PLATFORM_URL` (e.g. `https://platform.example.com`)
    and `CAMPAIGN_ID` for the campaign a W02/W04 instance drives.
 
-3. **Production URLs only.** PRD 9: "Use production webhook URLs only for live
+3. **Production URLs only.** "Use production webhook URLs only for live
    integrations; test URLs only for development." A production webhook needs
    the workflow to be published/active. [Ref. 1]
 

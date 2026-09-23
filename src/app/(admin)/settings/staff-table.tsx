@@ -118,7 +118,7 @@ function StaffCard({
       </div>
 
       {global ? (
-        // PRD 4 gives the Agency Admin global scope; assignments would be
+        // The Agency Admin holds global scope; assignments would be
         // misleading here, since they do not constrain anything.
         <div style={{ fontSize: 12, color: "var(--muted)" }}>
           Global scope: reaches every client without an assignment.

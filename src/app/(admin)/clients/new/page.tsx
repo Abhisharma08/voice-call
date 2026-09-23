@@ -8,7 +8,7 @@ import { OnboardForm } from "./onboard-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Onboard a client (PRD 14.3).
+ * Onboard a client.
  *
  * The permission check is here as well as in the action because rendering a
  * form someone cannot submit is its own kind of bug - and the action is the

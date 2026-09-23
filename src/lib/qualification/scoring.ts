@@ -1,18 +1,17 @@
 import type { QualificationResult } from "@/lib/qualification/schema";
 
 /**
- * Lead scoring and routing (PRD 11.2, 11.3).
+ * Lead scoring and routing.
  *
  * The scoring rubric is deliberately computed here in code, from the model's
- * extracted fields, rather than being asked of the model. PRD 11.2's rubric is
+ * extracted fields, rather than being asked of the model. The rubric is
  * arithmetic; making the LLM do arithmetic adds a failure mode and removes
  * auditability. This way a score is always reproducible from the stored
  * structured payload, which matters when an operator disputes a routing
  * decision.
  *
- * PRD 11.2: "The scoring rubric must be configurable per campaign. The default
- * rubric is illustrative and must not override domain-specific qualification
- * logic."
+ * The rubric is configurable per campaign. The default is illustrative and
+ * must not override a client's own domain-specific qualification logic.
  */
 
 export interface ScoringRubric {
@@ -103,7 +102,7 @@ function clamp(score: number): number {
   return Math.max(-100, Math.min(100, score));
 }
 
-// ── Routing (PRD 11.3) ──────────────────────────────────────────────────────
+// ── Routing ─────────────────────────────────────────────────────────────────
 
 export type RoutingAction =
   | "hot_sales_routing"
@@ -137,7 +136,7 @@ export interface RoutingDecision {
 }
 
 /**
- * PRD 11.3's condition table, in its stated precedence. DNC and explicit
+ * the condition table, in its stated precedence. DNC and explicit
  * rejection win "regardless of score"; a requested callback is honoured
  * "regardless of score" too.
  */
@@ -177,7 +176,7 @@ export function decideRouting(
   return { action: "nurture", reason: `score ${score} below interested threshold` };
 }
 
-/** Map a score and intent onto the PRD 11.1 outcome taxonomy for the CRM. */
+/** Map a score and intent onto the outcome taxonomy the CRM expects. */
 export function qualificationLabel(result: QualificationResult, score: number): string {
   if (result.do_not_call) return "do_not_call";
   if (result.wrong_number) return "wrong_number";

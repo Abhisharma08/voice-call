@@ -150,7 +150,7 @@ const ALUEMPIRE_TRANSCRIPTS: Record<string, Transcript> = {
   },
   // A vague enquiry with nothing decided. Every extractable field is genuinely
   // unstated, so the model must return nulls and a low confidence rather than
-  // filling gaps - which is the case FR-032 exists for, and the one that
+  // filling gaps - which is the case the schema guards against, and the one that
   // should land in the review queue rather than a client's CRM.
   "6": {
     durationSec: 48,
@@ -253,7 +253,7 @@ async function main() {
       campaign_ref: campaignId,
       contact: { name: lead.name, phone: lead.phone, email: lead.email },
       // Consent deliberately omitted: the campaign's declared basis supplies it
-      // (PRD 14.3 step 10), and each lead still gets its own dated record.
+      //, and each lead still gets its own dated record.
       correlation_id: `demo-${stamp}`,
     });
     const outcome = (result.body as { result?: { status?: string } })?.result?.status ?? "?";
@@ -262,7 +262,7 @@ async function main() {
 
   // ── 2 & 3. Dial, then answer the provider callbacks ──────────────────────
   //
-  // Looped, because one pass is not enough. FR-022 caps concurrent calls per
+  // Looped, because one pass is not enough. Concurrency is capped per
   // campaign, so a queue larger than the cap needs several rounds: each one
   // dials into whatever headroom the completed callbacks just freed.
   //
@@ -362,7 +362,7 @@ async function main() {
   if (!hasKey) {
     const needed = model.startsWith("gemini-") ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
     console.log(`   No ${needed} set for model "${model}" - analysis will degrade to`);
-    console.log("   'unknown' and every result will be held for review. That is the PRD 18.2");
+    console.log("   'unknown' and every result will be held for review. That is the");
     console.log("   fallback working, but you will not see real intents until a key is set.");
   }
 

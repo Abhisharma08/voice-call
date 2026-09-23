@@ -7,7 +7,7 @@ import { logger } from "@/lib/observability/log";
 export const runtime = "nodejs";
 
 /**
- * Outbox drain (workflow W03 steps 7-9, PRD 18.2). Runs on a schedule so a
+ * Outbox drain (workflow W03 steps 7-9). Runs on a schedule so a
  * HubSpot or Sheets outage clears itself once the provider recovers.
  */
 

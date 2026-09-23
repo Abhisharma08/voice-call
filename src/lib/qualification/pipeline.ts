@@ -26,8 +26,8 @@ import { auditInTx } from "@/lib/audit";
  *
  * Steps 7-9 do not call anything directly: they enqueue into sync_outbox, so a
  * HubSpot or Sheets outage becomes a retry rather than a lost result
- * (PRD 18.2). And nothing is enqueued at all when the review gate holds the
- * result (PRD 26.3).
+ *. And nothing is enqueued at all when the review gate holds the
+ * result.
  */
 
 export interface QualifyOutcome {
@@ -200,7 +200,7 @@ export async function qualifyCall(
   });
 
   if (gate.hold) {
-    // PRD 26.3: held results are excluded from Sheets append and HubSpot
+    // Held results are excluded from Sheets append and HubSpot
     // update until an operator resolves them. Nothing downstream happens here.
     await tx.query(
       `update leads set status = 'pending_review', status_reason = $2 where id = $1`,
@@ -270,7 +270,7 @@ export async function commitAnalysis(
     ).rows[0]?.phone_enc ?? null,
   );
 
-  // FR-033 / PRD 7.4: a DNC detected in conversation suppresses permanently
+  // A DNC detected in conversation suppresses permanently
   // and stops all retries.
   if (result.do_not_call) {
     await suppressLead(tx, {
@@ -284,7 +284,7 @@ export async function commitAnalysis(
     const scheduledFor = result.callback_time_iso ? new Date(result.callback_time_iso) : null;
     const valid = scheduledFor && !Number.isNaN(scheduledFor.getTime()) && scheduledFor > new Date();
 
-    // FR-043: a callback carries the call context.
+    // A callback carries the call context.
     await tx.query(
       `insert into callbacks (tenant_id, lead_id, call_id, scheduled_for)
        values ($1, $2, $3, $4)`,
@@ -317,7 +317,7 @@ export async function commitAnalysis(
   // back in the queue with a next_call_at; overwriting it here would mark an
   // unanswered call "qualified" and strand the lead.
 
-  // FR-034 / PRD 16: hot leads and explicit human requests create a routing
+  // Hot leads and explicit human requests create a routing
   // event for the sales recipient.
   if (args.routingAction === "hot_sales_routing" || result.human_followup) {
     await tx.query(
@@ -340,7 +340,7 @@ export async function commitAnalysis(
     });
   }
 
-  // FR-041, FR-042. PRD 18.1: sheet write dedupe key = call_id; the CRM update
+  // The sheet write dedupe key is the call id; the CRM update
   // is safe to retry because it sets current-state properties.
   await enqueueSync(tx, {
     tenantId: args.tenantId,

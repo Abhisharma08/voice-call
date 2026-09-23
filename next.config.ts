@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
    * only; Next ignores this in a production build.
    */
   allowedDevOrigins: ["*.trycloudflare.com"],
-  // PRD 17.1: no transcripts/recordings/phone numbers in public URLs, HTTPS everywhere.
+  // No transcripts/recordings/phone numbers in public URLs, HTTPS everywhere.
   poweredByHeader: false,
   async headers() {
     return [

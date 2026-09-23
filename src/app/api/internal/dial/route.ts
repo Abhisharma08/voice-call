@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // A campaign id outside this token's tenant simply does not exist under
-    // RLS - report it as not found, with no disclosure (PRD 23.3).
+    // RLS - report it as not found, with no disclosure.
     if (message.includes("Campaign not found")) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

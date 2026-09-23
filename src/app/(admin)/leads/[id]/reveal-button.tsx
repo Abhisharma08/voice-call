@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /**
- * PRD 26.2: "unmasked only on explicit detail-view action". The reveal writes
+ * "unmasked only on explicit detail-view action". The reveal writes
  * an audit row in the same transaction as the decrypt, so the number cannot be
  * read without a record of who read it.
  */

@@ -2,13 +2,13 @@
 -- 0004 — Phase 1: intake, queue, calling, qualification.
 --
 -- Adds what the vertical slice needs on top of the Phase 0 schema:
---   * service identities for n8n (PRD 4, 9)
---   * webhook idempotency (PRD 18.1)
---   * queue claim/lock columns and concurrency caps (FR-020, FR-022)
---   * per-campaign provider + model configuration (PRD 10.4)
+--   * service identities for n8n
+--   * webhook idempotency
+--   * queue claim/lock columns and concurrency caps
+--   * per-campaign provider + model configuration
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- ── Service identities for n8n workers (PRD 9) ────────────────────────────
+-- ── Service identities for n8n workers ────────────────────────────────────
 -- A token is stored only as a SHA-256 hash. Each token is bound to one tenant,
 -- so a leaked worker credential cannot reach another client's data even before
 -- RLS is considered.
@@ -26,10 +26,9 @@ create table service_tokens (
 );
 create index service_tokens_tenant_idx on service_tokens (tenant_id) where revoked_at is null;
 
--- ── Webhook idempotency (PRD 18.1) ────────────────────────────────────────
--- "HubSpot event idempotency key = tenant_id + source_event_id/record_id +
--- event type." Storing the raw event alongside gives us replay for the
--- dead-letter path in PRD 18.3.
+-- ── Webhook idempotency ───────────────────────────────────────────────────
+-- The idempotency key is tenant_id + source event or record id + event type.
+-- Storing the raw event alongside gives us replay for the dead-letter path.
 create table webhook_events (
   id             uuid primary key default gen_random_uuid(),
   tenant_id      uuid not null references tenants(id) on delete cascade,
@@ -46,7 +45,7 @@ create table webhook_events (
 create unique index webhook_events_idem_uniq on webhook_events (tenant_id, idempotency_key);
 create index webhook_events_tenant_received_idx on webhook_events (tenant_id, received_at desc);
 
--- ── Queue claim / locking (FR-020, FR-022) ────────────────────────────────
+-- ── Queue claim / locking ─────────────────────────────────────────────────
 -- A worker claims a lead by taking a time-boxed lock. If the worker dies, the
 -- lock expires and the lead becomes claimable again rather than being stranded
 -- in `calling` forever.
@@ -65,13 +64,13 @@ create index leads_stale_lock_idx
   on leads (lock_expires_at)
   where status = 'calling';
 
--- FR-022: "Limit concurrent calls per tenant/campaign/provider."
+-- "Limit concurrent calls per tenant/campaign/provider."
 alter table campaigns
   add column concurrency_limit integer not null default 5,
   add column voice_provider    text not null default 'mock',
   add column analysis_model    text not null default 'claude-opus-5',
   add column analysis_effort   text not null default 'medium',
-  -- PRD 26.3: the confidence floor below which a result is held for review,
+  -- The confidence floor below which a result is held for review,
   -- and the band around the hot/interested boundary that also triggers review.
   add column review_confidence_threshold numeric(4,3) not null default 0.750,
   add column review_boundary_band        integer      not null default 5,

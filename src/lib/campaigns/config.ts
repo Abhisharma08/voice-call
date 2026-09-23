@@ -3,16 +3,15 @@ import { DEFAULT_SHEET_RANGE } from "@/lib/integrations/google-sheets";
 import type { PoolClient } from "pg";
 
 /**
- * Campaign configuration (PRD 22 Phase 2: "Per-campaign prompts/questions/
- * scoring").
+ * Campaign configuration: per-campaign prompts, questions and scoring.
  *
- * The design principle from the PRD's first page governs this file:
+ * One design principle governs this file:
  * "client-specific behavior comes from configuration and tenant-scoped data,
  * not duplicated workflows." Everything a client can differ on lives here as
  * validated data.
  *
  * Every save bumps `config_version` and snapshots the whole configuration into
- * campaign_versions. PRD 9 requires the version be recorded with each call;
+ * campaign_versions. The version is recorded with each call;
  * that number is only useful if the configuration it names can still be read
  * back months later, when someone asks which script produced a given result.
  */

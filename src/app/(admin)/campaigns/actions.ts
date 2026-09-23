@@ -12,7 +12,7 @@ import {
 } from "@/lib/campaigns/config";
 
 /**
- * Campaign configuration actions (PRD 22 Phase 2).
+ * Campaign configuration actions.
  *
  * Nothing here gates calling on a compliance sign-off - consent is collected
  * upstream in the client's funnel and recorded on each lead at intake. The
@@ -77,9 +77,9 @@ const Declare = z.object({
 });
 
 /**
- * PRD 14.3 step 10: record the consent basis for this client's lead list.
+ * Record the consent basis for this client's lead list.
  *
- * PRD 26.1 is blunt about why this is a separate, attributed action: "A
+ * Why this is a separate, attributed action: a
  * client's verbal assurance that 'leads are opted in' is not sufficient
  * evidence on its own." Whoever records it is named in the row.
  */
@@ -127,13 +127,13 @@ const Approve = z.object({
 });
 
 /**
- * PRD 17.3's compliance gate.
+ * The compliance gate.
  *
- * "Do not activate India outbound campaigns until a telecom/compliance review
- * confirms the agency's own sender/telemarketer registration and calling
- * category, the consent basis and evidence supplied for the client's lead
- * list, provider arrangement, DNC handling, recording notices, and retention
- * requirements."
+ * The rule this was built for: do not activate India outbound campaigns until
+ * a telecom or compliance review confirms the agency's own sender and
+ * telemarketer registration and calling category, the consent basis and
+ * evidence supplied for the client's lead list, the provider arrangement, DNC
+ * handling, recording notices and retention requirements.
  *
  * No longer a precondition for calling. Kept so a client who needs a named
  * person on record can still produce one, and restricted to

@@ -18,8 +18,8 @@ const Body = z.object({
 });
 
 /**
- * Resolve a held qualification (PRD 26.3). Restricted to `review:resolve`,
- * which PRD 4 gives to the Operations Manager - the owner of this queue.
+ * Resolve a held qualification. Restricted to `review:resolve`,
+ * which belongs to the Operations Manager - the owner of this queue.
  */
 export async function POST(request: NextRequest) {
   const user = await currentUser();

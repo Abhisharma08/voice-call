@@ -2,14 +2,14 @@ import type { QualificationResult } from "@/lib/qualification/schema";
 import type { RoutingThresholds } from "@/lib/qualification/scoring";
 
 /**
- * The human-review gate (FR-035, PRD 26.3).
+ * The human-review gate.
  *
- * "Low-confidence or borderline qualification results are routed to a human
- * review queue instead of being auto-committed to CRM/Sheets. Results below
- * the confidence/consistency threshold are held in pending_review status and
- * excluded from auto-sync until an operator confirms or corrects them."
+ * Low-confidence or borderline results go to a human review queue instead of
+ * being auto-committed to the CRM or the sheet. They are held in
+ * pending_review and excluded from auto-sync until an operator confirms or
+ * corrects them.
  *
- * PRD 26.3 gives three triggers. This adds no others, and - importantly - the
+ * Three triggers, and no others - importantly, the
  * default when in doubt is to hold. The client never sees a result before it
  * lands in their CRM, so the Operations Manager is the only checkpoint.
  */
@@ -68,7 +68,7 @@ export function evaluateReviewGate(input: ReviewGateInput): ReviewDecision {
   const nearInterested = Math.abs(input.score - input.thresholds.interestedThreshold) <= band;
   if (nearHot || nearInterested) triggers.push("boundary_band");
 
-  // Not in PRD 26.3's table, but a hallucinated DNC permanently suppresses a
+  // Not in the table, but a hallucinated DNC permanently suppresses a
   // real lead and cannot be undone by a later call - so a low-confidence DNC
   // gets a human before the suppression is written.
   if (input.result.do_not_call && input.result.confidence < 0.9) {
@@ -127,7 +127,7 @@ function describe(triggers: ReviewTrigger[], input: ReviewGateInput, missing: st
 }
 
 /**
- * Whether a result may sync downstream. PRD 26.3: pending_review results are
+ * Whether a result may sync downstream. Pending_review results are
  * "excluded from Sheets append and HubSpot update until resolved".
  */
 export function mayAutoSync(reviewStatus: string): boolean {

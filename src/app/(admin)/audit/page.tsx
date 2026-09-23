@@ -6,10 +6,10 @@ import { AccessDenied } from "../access-denied";
 export const dynamic = "force-dynamic";
 
 /**
- * Audit log (PRD 14.1, 17.1).
+ * Audit log.
  *
- * PRD 17.1 requires configuration changes, manual suppression, routing changes
- * and data exports to be audited, and PRD 26.2 adds every read of a phone
+ * Configuration changes, manual suppression, routing changes
+ * and data exports are all audited, plus every read of a phone
  * number, transcript or recording. This page is where that record is actually
  * legible.
  *

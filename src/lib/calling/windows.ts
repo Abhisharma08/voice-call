@@ -1,6 +1,6 @@
 /**
- * Calling windows (FR-021: "Respect configurable campaign calling windows and
- * timezone. Calls outside window are delayed.").
+ * Calling windows. A campaign's window and timezone are configurable, and a
+ * call that falls outside the window is delayed rather than placed.
  *
  * The window is expressed in the campaign's own IANA timezone, not the
  * server's. An agency in one country calling leads in another gets this wrong

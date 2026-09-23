@@ -124,7 +124,7 @@ describe("createCall", () => {
     );
   });
 
-  it("treats a 401 as permanent and a 503 as retryable (PRD 18.2)", async () => {
+  it("treats a 401 as permanent and a 503 as retryable", async () => {
     const unauthorized = new SarvamVoiceProvider(
       config,
       stubFetch(() => json({ detail: "bad key" }, 401)).impl,
@@ -254,7 +254,7 @@ describe("carrier failure classification", () => {
   it("suppresses a number registered under TRAI NDNC", () => {
     // The exact string Sarvam's docs give as an example. Retrying a
     // registry-suppressed number is futile and a regulatory problem, so it
-    // must not reach the retry ladder (PRD 17.4).
+    // must not reach the retry ladder.
     const result = provider.handleWebhook(
       failure("exotel: Phone number is registered under TRAI NDNC"),
       {},
@@ -301,7 +301,7 @@ describe("carrier failure classification", () => {
 
 describe("capabilities", () => {
   it("declares India as its supported region", () => {
-    // PRD 10.4: the calling worker treats an empty list as "unrestricted,
+    // The calling worker treats an empty list as "unrestricted,
     // confirm with counsel". Sarvam's whole point here is that it is not empty.
     expect(new SarvamVoiceProvider(config).metadata()).toMatchObject({
       name: "sarvam",

@@ -7,12 +7,12 @@ import { NewCampaignForm } from "./new-campaign-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Campaign list (PRD 22 Phase 2: "Multiple campaigns").
+ * Campaign list.
  *
  * One client can run several campaigns, each with its own script, questions,
  * scoring and calling hours - that is the whole point of the configuration
  * model. Each row shows whether it can actually dial, because "active" and
- * "allowed to call" are different things here (PRD 17.3).
+ * "allowed to call" are different things here.
  */
 export default async function CampaignsPage() {
   const user = await requireUser();

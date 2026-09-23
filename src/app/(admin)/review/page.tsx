@@ -6,13 +6,12 @@ import { ReviewList, type ReviewItem } from "./review-list";
 export const dynamic = "force-dynamic";
 
 /**
- * The human-review queue (PRD 26.3).
+ * The human-review queue.
  *
  * Everything listed here is excluded from HubSpot and Sheets until an operator
- * resolves it. PRD 26.3: the agency's Operations Manager "is the only
- * checkpoint between an AI qualification call and the client's sales
- * pipeline - there is no client-side review to catch a bad result
- * downstream."
+ * resolves it. The agency's Operations Manager is the only checkpoint between
+ * an AI qualification call and the client's sales pipeline - there is no
+ * client-side review to catch a bad result downstream.
  */
 export default async function ReviewPage() {
   const user = await requireUser();
@@ -51,7 +50,7 @@ export default async function ReviewPage() {
          left join campaigns c on c.id = ca.campaign_id
         where an.review_status = 'pending_review'
         order by
-          -- PRD 26.3: "hot-intent items in the backlog escalate first"
+          -- "hot-intent items in the backlog escalate first"
           case when an.intent in ('hot','interested') then 0 else 1 end,
           an.created_at
         limit 100`,

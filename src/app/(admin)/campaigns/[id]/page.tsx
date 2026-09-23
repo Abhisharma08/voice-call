@@ -10,8 +10,7 @@ import { CallingStatus } from "./calling-status";
 export const dynamic = "force-dynamic";
 
 /**
- * Campaign configuration (PRD 22 Phase 2: "Per-campaign prompts/questions/
- * scoring").
+ * Campaign configuration: per-campaign prompts, questions and scoring.
  *
  * Everything that makes one client's calls differ from another's is on this
  * page. Nothing here is code: the same workflows serve every campaign.

@@ -8,11 +8,11 @@ import { CreateUserForm } from "./create-user-form";
 export const dynamic = "force-dynamic";
 
 /**
- * Staff, assignments and elevations (PRD 4, 8.2).
+ * Staff, assignments and elevations.
  *
- * PRD 8.2 identifies the primary isolation risk in this platform as "an
- * internal operator viewing, editing, or exporting the wrong client's leads -
- * not an external attacker probing for tenant IDs." This page is where that
+ * The primary isolation risk in this platform is an
+ * internal operator viewing, editing or exporting the wrong client's leads,
+ * not an external attacker probing for tenant IDs. This page is where that
  * risk is actually managed: who exists, what they are scoped to, and which
  * temporary exceptions are currently live.
  */

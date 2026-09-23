@@ -3,10 +3,10 @@ import { withScope, withoutScope } from "@/db/client";
 import { logger } from "@/lib/observability/log";
 
 /**
- * Audit trail (PRD 17.1, 26.2).
+ * Audit trail.
  *
- * PRD 17.1 requires configuration changes, manual suppression, routing changes
- * and data exports to be audited. PRD 26.2 goes further for sensitive reads:
+ * Configuration changes, manual suppression, routing changes
+ * and data exports are all audited. Sensitive reads go further:
  * "every read logged to audit_events" for transcripts and recordings.
  *
  * audit_events is append-only for runtime roles - migration 0002 grants
@@ -78,7 +78,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
 }
 
 /**
- * PRD 26.2: reading a phone number, transcript or recording is itself an
+ * Reading a phone number, transcript or recording is itself an
  * auditable event. Wrap those reads in this so the log cannot be forgotten.
  */
 export async function auditedReveal<T>(

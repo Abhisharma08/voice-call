@@ -53,7 +53,7 @@ export async function ingestSubscriptionEvents(
     const eventId = String(event.eventId);
     const contactId = String(event.objectId);
 
-    // PRD 18.1: tenant + source event id + event type. HubSpot retries a
+    // Tenant + source event id + event type. HubSpot retries a
     // delivery it did not see acknowledged, and the whole point of the key is
     // that a retry costs a lookup rather than a second call to a person.
     const idempotencyKey = `hubspot:app:contact.creation:${eventId}`;

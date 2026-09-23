@@ -99,7 +99,7 @@ function ReviewCard({
         </span>
         {item.campaignName ? <span className="pill">{item.campaignName}</span> : null}
         <span className="pill">
-          {/* PRD 26.2: only the last four digits render without an explicit reveal. */}
+          {/* Only the last four digits render without an explicit reveal. */}
           {item.phoneLast4 ? `ending ${item.phoneLast4}` : "no number"}
         </span>
         {item.durationSec !== null ? <span className="pill">{item.durationSec}s</span> : null}
@@ -200,7 +200,7 @@ function ExtractedFields({ payload }: { payload: Record<string, unknown> }) {
     <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
       {DISPLAY_FIELDS.map(([key, label]) => {
         const value = payload[key];
-        // A null is meaningful here: FR-032 says the model must say "unknown"
+        // A null is meaningful here: the model must say "unknown"
         // rather than invent, so showing it as blank would hide the signal
         // that triggered the review.
         const display =

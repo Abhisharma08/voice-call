@@ -17,12 +17,12 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * Lead intake ingress (FR-010, workflow W01).
+ * Lead intake ingress (workflow W01).
  *
- * PRD 20's lead intake event, with two changes the contract there implies but
+ * the lead intake event, with two changes the contract there implies but
  * does not spell out: the tenant comes from the service credential rather than
- * `tenant_ref` in the body (PRD 8.2), and every event is recorded for
- * idempotency before it is processed (PRD 18.1).
+ * `tenant_ref` in the body, and every event is recorded for
+ * idempotency before it is processed.
  */
 
 const Body = z.object({
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
   }
 
   const event = parsed.data;
-  // PRD 18.1: tenant + source event id + event type.
+  // Tenant + source event id + event type.
   const idempotencyKey = `${event.source}:lead_created:${event.event_id}`;
 
   try {
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       return { replay: false, result };
     });
 
-    // Dial immediately rather than waiting for the scheduled sweep (G2). A
+    // Dial immediately rather than waiting for the scheduled sweep. A
     // replay dials nothing: the lead it names is already in flight.
     if (!outcome.replay && (outcome.result as { status?: string } | null)?.status === "queued") {
       after(() =>

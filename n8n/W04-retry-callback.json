@@ -45,7 +45,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [260, 0],
-      "notes": "Clears the backlog once HubSpot or Sheets recovers. Rows past the attempt cap become dead_letter and need an operator replay (PRD 18.3)."
+      "notes": "Clears the backlog once HubSpot or Sheets recovers. Rows past the attempt cap become dead_letter and need an operator replay."
     }
   ],
   "connections": {

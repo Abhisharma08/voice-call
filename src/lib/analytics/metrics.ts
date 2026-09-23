@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 
 /**
- * The analytics page's numbers (PRD 21), in one pass per table.
+ * The analytics page's numbers, in one pass per table.
  *
  * This replaced seventeen independent subqueries, each of which was a full
  * sequential scan: call_analyses was scanned seven times to count seven
@@ -66,9 +66,9 @@ export async function loadMetrics(
          select count(*)                                                     as attempts,
                 count(*) filter (where status = 'completed')                 as connected,
                 round(avg(duration_sec) filter (where status = 'completed')) as avg_duration,
-                -- PRD 21: "Lead-to-call latency = first_call_started -
-                -- lead_created", measured from queued_at - the moment the
-                -- platform accepted responsibility, which is what G2's 30s
+                -- Lead-to-call latency is first_call_started minus
+                -- lead_created, measured from queued_at - the moment the
+                -- platform accepted responsibility, which is what the 30s
                 -- target is about. Stamped at dial time (migration 0013), so
                 -- this no longer hash-joins every attempt back to its lead.
                 round(percentile_cont(0.95) within group (order by queue_latency_sec)

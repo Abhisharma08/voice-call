@@ -3,8 +3,7 @@ import { IntegrationError } from "@/lib/integrations/hubspot";
 import type { NotificationPayload } from "@/lib/integrations/sync-worker";
 
 /**
- * Hot-lead delivery over a Slack incoming webhook (PRD 16, the Notification
- * Layer).
+ * Hot-lead delivery over a Slack incoming webhook.
  *
  * Everything upstream of this file already existed: `qualifyCall` enqueues a
  * `notification` row into `sync_outbox`, `sync-worker` builds the payload with
@@ -111,7 +110,7 @@ export class SlackNotifier {
       throw new IntegrationError(
         `Slack webhook is no longer valid (${response.status}): ${detail}`,
         false,
-        // Surfaced as 401 so the worker's PRD 18.2 auth-failure rule marks the
+        // Surfaced as 401 so the worker's auth-failure rule marks the
         // integration `error` and stops using it, rather than leaving a dead
         // webhook configured and apparently healthy.
         401,
@@ -146,7 +145,7 @@ interface SlackMessage {
  * The phone number arrives already masked from `sync-worker`, and is not
  * unmasked here. A Slack channel is outside the platform's access-control
  * layer and its retention is the client's, so the full number stays in
- * PostgreSQL behind the audited reveal (PRD 26.2).
+ * PostgreSQL behind the audited reveal.
  */
 export function buildMessage(payload: NotificationPayload): SlackMessage {
   const who = payload.leadName ?? "Unnamed lead";

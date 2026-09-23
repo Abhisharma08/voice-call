@@ -5,11 +5,11 @@ import { checkEligibility } from "@/lib/leads/eligibility";
 import { auditInTx } from "@/lib/audit";
 
 /**
- * Lead intake (FR-010 to FR-014), the platform half of n8n workflow W01.
+ * Lead intake, the platform half of n8n workflow W01.
  *
- * Order matters and follows PRD 7.1: validate and normalise, resolve the
+ * Order matters and follows Validate and normalise, resolve the
  * campaign, check consent/DNC, then queue. A lead that fails any step is
- * persisted with the reason rather than dropped - PRD FR-012 requires the
+ * persisted with the reason rather than dropped: the
  * reason be recorded, and an invisible rejection is impossible to debug when a
  * client asks why their lead was never called.
  */
@@ -31,7 +31,7 @@ export interface IntakeEvent {
     requirement?: string | null;
   };
   /**
-   * Consent as supplied by the client (PRD 26.1). The agency did not run the
+   * Consent as supplied by the client. The agency did not run the
    * client's opt-in funnel, so this is a claim to be recorded as evidence, not
    * a fact to be trusted.
    */
@@ -84,8 +84,7 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
   const phoneBidx = phoneE164 ? blindIndex(tenantId, phoneE164) : null;
   const emailBidx = email ? blindIndex(tenantId, email) : null;
 
-  // FR-013: "Deduplicate by tenant + source record ID and secondary
-  // phone/email rules."
+  // Deduplicate by tenant plus source record id, then by phone and email.
   const existing = await findExisting(tx, {
     tenantId,
     recordId: event.recordId,
@@ -116,7 +115,7 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
   const { consent, capturedBy } = resolveConsent(event, campaign);
   await recordConsent(tx, tenantId, leadId, consent, capturedBy);
 
-  // FR-012: no callable number means quarantine, with the reason recorded and
+  // No callable number means quarantine, with the reason recorded and
   // no call placed.
   if (!phone.ok) {
     await tx.query(
@@ -136,7 +135,7 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
   }
 
   // A lead already in a terminal or in-flight state must not be re-queued by a
-  // duplicate webhook (FR-013: "Duplicate event does not create duplicate call").
+  // duplicate webhook: a duplicate event must not create a duplicate call.
   if (existing && !isRequeueable(existing.status)) {
     return { status: "duplicate_ignored", leadId };
   }
@@ -172,7 +171,7 @@ export async function ingestLead(tx: PoolClient, event: IntakeEvent): Promise<In
     };
   }
 
-  // FR-020: eligible leads are queued. G2 targets p95 under 30 seconds from
+  // Eligible leads are queued. The target is p95 under 30 seconds from
   // CRM ingestion, so next_call_at is now and the calling window is applied by
   // the worker rather than deferring here.
   await tx.query(
@@ -355,7 +354,7 @@ async function recordConsent(
   consent: NonNullable<IntakeEvent["consent"]>,
   capturedBy: ConsentProvenance,
 ): Promise<void> {
-  // PRD 26.1: the agency needs its own evidentiary trail rather than an
+  // The agency needs its own evidentiary trail rather than an
   // unverified assumption inherited from the client at intake.
   const existing = await tx.query(
     `select 1 from consents where lead_id = $1 and status = 'active' limit 1`,

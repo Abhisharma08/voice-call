@@ -1,10 +1,10 @@
 -- ═══════════════════════════════════════════════════════════════════════════
--- 0001 — Core schema (PRD 12 Data Model, 26.1 Consent, 26.2 PII, 26.3 Review).
+-- 0001 — Core schema: tenancy, consent, PII and the review gate.
 --
--- Deviation from PRD 12, deliberate: `users` has a NULLABLE tenant_id. Every
--- persona in PRD 4 is agency staff — clients never log in (PRD 14.3) — so a
+-- One deliberate choice: `users` has a NULLABLE tenant_id. Every persona
+-- here is agency staff — clients never log in — so a
 -- user belongs to the agency, and per-client scope is granted through
--- user_tenant_assignments. PRD 8.2 requires staff be scoped to assigned
+-- user_tenant_assignments. Staff are scoped to their assigned
 -- tenants by default with explicit, logged elevation; access_elevations is
 -- that log.
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -64,7 +64,7 @@ create table users (
 );
 create index users_role_idx on users (role) where status = 'active';
 
--- PRD 8.2: default scope is the assignment set, not "everything".
+-- Default scope is the assignment set, not "everything".
 create table user_tenant_assignments (
   user_id     uuid not null references users(id) on delete cascade,
   tenant_id   uuid not null references tenants(id) on delete cascade,
@@ -75,8 +75,8 @@ create table user_tenant_assignments (
 );
 create index user_tenant_assignments_tenant_idx on user_tenant_assignments (tenant_id);
 
--- PRD 8.2: "access to a client outside that assignment requires an explicit,
--- logged elevation rather than being available by default".
+-- Access to a client outside a staff member's assignment requires an
+-- explicit, logged elevation rather than being available by default.
 create table access_elevations (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references users(id) on delete cascade,
@@ -106,7 +106,7 @@ create table sessions (
 create index sessions_user_idx on sessions (user_id) where revoked_at is null;
 create index sessions_expiry_idx on sessions (expires_at) where revoked_at is null;
 
--- ── Secrets vault (PRD 17.1: store only secret references in the app DB) ────
+-- ── Secrets vault (store only secret references in the app DB) ──────────────
 create table secrets (
   id            uuid primary key default gen_random_uuid(),
   tenant_id     uuid references tenants(id) on delete cascade, -- null = platform-level
@@ -147,13 +147,13 @@ create table campaigns (
   timezone          text not null default 'Asia/Kolkata',
   active            boolean not null default false,
   config_version    integer not null default 1,
-  -- calling windows, retries, thresholds (PRD Appendix B)
+  -- calling windows, retries, thresholds
   calling_config    jsonb not null default '{}'::jsonb,
   routing_config    jsonb not null default '{}'::jsonb,
   scoring_rubric    jsonb not null default '{}'::jsonb,
-  -- PRD 26.1: campaign may be flagged service-call/existing-relationship
+  -- Campaign may be flagged service-call/existing-relationship
   service_call_campaign boolean not null default false,
-  -- PRD 17.3: no India outbound until compliance review signs off
+  -- No India outbound until compliance review signs off
   compliance_approved_at timestamptz,
   compliance_approved_by uuid references users(id),
   google_sheet_id   text,
@@ -180,7 +180,7 @@ create table qualification_rules (
 );
 create index qualification_rules_campaign_idx on qualification_rules (campaign_id, position);
 
--- ── Leads (PRD 26.2: direct identifiers are encrypted at column level) ──────
+-- ── Leads (direct identifiers are encrypted at column level) ────────────────
 -- *_enc  : AES-256-GCM ciphertext, decrypted only in the app layer
 -- *_bidx : HMAC-SHA256 blind index, enables equality lookup without decrypting
 create table leads (
@@ -205,14 +205,14 @@ create table leads (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
--- PRD 12 Indexes
+-- Indexes
 create unique index leads_tenant_hubspot_uniq
   on leads (tenant_id, hubspot_record_id) where hubspot_record_id is not null;
 create index leads_tenant_status_idx on leads (tenant_id, status);
 create index leads_tenant_phone_bidx on leads (tenant_id, phone_bidx);
 create index leads_queue_idx on leads (campaign_id, status, next_call_at);
 
--- ── Consent (PRD 26.1) ─────────────────────────────────────────────────────
+-- ── Consent ────────────────────────────────────────────────────────────────
 create table consents (
   id            uuid primary key default gen_random_uuid(),
   tenant_id     uuid not null references tenants(id) on delete cascade,
@@ -229,7 +229,7 @@ create table consents (
 create index consents_lead_active_idx on consents (lead_id) where status = 'active';
 create index consents_tenant_idx on consents (tenant_id, status);
 
--- ── DNC / suppression (PRD 17.4) ───────────────────────────────────────────
+-- ── DNC / suppression ──────────────────────────────────────────────────────
 create table dnc_entries (
   id           uuid primary key default gen_random_uuid(),
   tenant_id    uuid not null references tenants(id) on delete cascade,
@@ -262,17 +262,17 @@ create table call_attempts (
   duration_sec      integer,
   recording_ref     text,
   failure_reason    text,
-  -- PRD 26.1: consent basis is stamped at call time so each call is
+  -- Consent basis is stamped at call time so each call is
   -- individually justifiable later, even if the consent record changes.
   consent_id        uuid references consents(id) on delete set null,
   consent_basis     consent_basis,
-  -- PRD 9: record workflow/config version with each call for auditability
+  -- Record workflow/config version with each call for auditability
   campaign_config_version integer,
   workflow_version  text,
   correlation_id    text,
   created_at        timestamptz not null default now()
 );
--- PRD 18.1: call result idempotency key = provider + provider_call_id
+-- Call result idempotency key = provider + provider_call_id
 create unique index call_attempts_provider_call_uniq
   on call_attempts (provider, provider_call_id) where provider_call_id is not null;
 create unique index call_attempts_lead_attempt_uniq on call_attempts (lead_id, attempt_no);
@@ -284,7 +284,7 @@ create table call_transcripts (
   tenant_id      uuid not null references tenants(id) on delete cascade,
   call_id        uuid not null references call_attempts(id) on delete cascade,
   transcript_ref text,
-  transcript_enc bytea,               -- PRD 26.2: high-sensitivity, encrypted
+  transcript_enc bytea,               -- High-sensitivity, encrypted
   language       text,
   created_at     timestamptz not null default now()
 );
@@ -301,7 +301,7 @@ create table call_analyses (
   confidence         numeric(4,3),
   model              text,
   prompt_version     text,
-  -- PRD 26.3 / FR-035: nothing below threshold auto-commits downstream
+  -- Nothing below threshold auto-commits downstream
   review_status      review_status not null default 'pending_review',
   review_reason      text,
   reviewed_by        uuid references users(id),
@@ -341,12 +341,12 @@ create table routing_events (
 );
 create index routing_events_tenant_created_idx on routing_events (tenant_id, created_at desc);
 
--- ── Outbound sync outbox (PRD 18.2: pending sync survives outages) ─────────
+-- ── Outbound sync outbox (pending sync survives outages) ───────────────────
 create table sync_outbox (
   id              uuid primary key default gen_random_uuid(),
   tenant_id       uuid not null references tenants(id) on delete cascade,
   target          sync_target not null,
-  dedupe_key      text not null,     -- PRD 18.1: sheet write dedupe key = call_id
+  dedupe_key      text not null,     -- Sheet write dedupe key = call_id
   payload         jsonb not null,
   status          sync_status not null default 'pending',
   attempts        integer not null default 0,
@@ -358,7 +358,7 @@ create table sync_outbox (
 create unique index sync_outbox_dedupe_uniq on sync_outbox (tenant_id, target, dedupe_key);
 create index sync_outbox_due_idx on sync_outbox (status, next_attempt_at);
 
--- ── Audit (PRD 17.1, 26.2: every PII/media read is logged) ─────────────────
+-- ── Audit (every PII/media read is logged) ─────────────────────────────────
 create table audit_events (
   id            uuid primary key default gen_random_uuid(),
   tenant_id     uuid references tenants(id) on delete set null,

@@ -39,7 +39,7 @@ update leads
 
 -- The declared basis is documentation now, not a precondition. Approvals that
 -- 0005 revoked for lacking one are not restored here: a compliance sign-off is
--- a statement by a named person (PRD 17.3), so it has to be re-made by one.
+-- a statement by a named person, so it has to be re-made by one.
 comment on column campaigns.consent_basis is
   'Optional record of what the client asserted about this list. Documentation '
   'for the audit trail; it gates nothing. Consent itself is collected upstream '

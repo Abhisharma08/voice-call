@@ -8,7 +8,7 @@ import { VoiceCredentialFields } from "./voice-credential-fields";
 /**
  * Rotate an integration's secret without disturbing the integration.
  *
- * A credential is write-only by design - PRD 17.1 keeps the plaintext out of
+ * A credential is write-only by design - the plaintext stays out of
  * every read path, so there is nothing to show and nothing to edit in place.
  * What an operator actually needs is to replace it: a token expired, a secret
  * leaked, or the original was pasted without the `clientSecret` that inbound

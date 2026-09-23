@@ -12,16 +12,16 @@ import { applyRetryDecision } from "@/lib/calling/results";
 import { auditInTx } from "@/lib/audit";
 
 /**
- * Resolving a held review (PRD 26.3).
+ * Resolving a held review.
  *
- * "Operator confirms or corrects -> Final result released to
- * Sheets/HubSpot/routing; correction logged to audit_events with
- * actor_type=human."
+ * When an operator confirms or corrects, the final result is released to the
+ * sheet, the CRM and routing, and the correction is logged to audit_events
+ * with actor_type = human.
  *
  * A correction re-runs scoring and routing from the corrected fields rather
  * than letting the operator set a score directly. Otherwise two leads with
  * identical answers could carry different scores depending on who reviewed
- * them, and the rubric in PRD 11.2 would stop meaning anything.
+ * them, and the scoring rubric would stop meaning anything.
  */
 
 export type ResolutionAction = "confirm" | "correct" | "reject";
@@ -162,7 +162,7 @@ export async function resolveReview(
     ],
   );
 
-  // PRD 26.3: "correction logged to audit_events with actor_type=human".
+  // "correction logged to audit_events with actor_type=human".
   await auditInTx(tx, {
     tenantId: args.tenantId,
     actorType: "user",
@@ -219,7 +219,7 @@ function changedFields(before: QualificationResult, after: QualificationResult):
   );
 }
 
-/** Keep free-text out of the audit metadata; PRD 26.2 treats it as sensitive. */
+/** Keep free-text out of the audit metadata; it counts as sensitive. */
 function redact(result: QualificationResult): Record<string, unknown> {
   const { summary: _summary, reason: _reason, ...rest } = result;
   return rest;

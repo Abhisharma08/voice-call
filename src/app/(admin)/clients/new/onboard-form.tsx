@@ -5,7 +5,7 @@ import Link from "next/link";
 import { onboardClient, type OnboardedClient } from "../actions";
 
 /**
- * PRD 14.3's wizard, as one form.
+ * the wizard, as one form.
  *
  * The steps it collapses - create tenant, create campaign, write a script and
  * questions, mint the credential HubSpot posts with - were previously four

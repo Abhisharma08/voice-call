@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 import { auditInTx } from "@/lib/audit";
 
 /**
- * Callbacks as work (FR-043).
+ * Callbacks as work.
  *
  * A callback row is created when a lead asks to be called at a particular
  * time. Two separate things then have to happen, and keeping them apart is the

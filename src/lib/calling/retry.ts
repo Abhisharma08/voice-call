@@ -1,5 +1,5 @@
 /**
- * Retry and callback policy (FR-024, PRD 9 workflow W04).
+ * Retry and callback policy (workflow W04).
  *
  * W04's trigger table maps an outcome to an action:
  *   no_answer           increment attempt; schedule retry within campaign policy
@@ -91,8 +91,8 @@ export function decideRetry(args: {
 }
 
 /**
- * Exponential backoff for integration retries (PRD 18.2: "Temporary HTTP 5xx -
- * Yes - Exponential backoff"). Jittered, so a provider outage does not produce
+ * Exponential backoff for integration retries: a temporary HTTP 5xx is worth
+ * retrying, slowly. Jittered, so a provider outage does not produce
  * a synchronised retry stampede when it recovers.
  */
 export function backoffDelayMs(attempt: number, baseMs = 1_000, maxMs = 15 * 60_000): number {

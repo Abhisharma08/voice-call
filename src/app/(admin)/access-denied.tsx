@@ -1,7 +1,7 @@
 /**
  * A clean refusal for a surface the signed-in role may not use.
  *
- * Distinct from the 404 that a cross-tenant request gets: PRD 23.3's
+ * Distinct from the 404 that a cross-tenant request gets: the
  * non-disclosure rule is about not revealing whether another client's data
  * exists. Which *features* a role holds is not a secret from that role, and
  * pretending a page does not exist would just look like a bug.

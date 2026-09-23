@@ -19,7 +19,7 @@ import "./load-env.ts";
  *   - the script, templated with `{{name}}` and `{{requirement}}` so the call
  *     names the lead and says their own enquiry back to them.
  *   - a neural Indian English voice, rather than the flat standard one.
- *   - two qualification questions (FR-030) - confirm the enquiry, confirm the
+ *   - two qualification questions - confirm the enquiry, confirm the
  *     requirement. Stale rules from a previous shape are removed, because a
  *     required field the call never asks about holds every result for review.
  *   - a scoring rubric, routing thresholds, and a dial allowlist.
@@ -62,7 +62,7 @@ const DIAL_ALLOWLIST = [
 
 /**
  * `npm run db:seed:aluempire -- --approve` also records a consent basis and
- * satisfies the PRD 17.3 gate, so the campaign can be activated and driven end
+ * satisfies the compliance gate, so the campaign can be activated and driven end
  * to end locally.
  *
  * This is a DEVELOPMENT convenience and it says so in the audit log: the entry
@@ -125,7 +125,7 @@ async function main() {
     }
     const campaignId = c.id;
 
-    // Staff see only the clients they are assigned to (PRD 8.2), so without
+    // Staff see only the clients they are assigned to, so without
     // this the campaign exists but nobody below Agency Admin can open it.
     await client.query(
       `insert into user_tenant_assignments (user_id, tenant_id, role)
@@ -201,7 +201,7 @@ async function main() {
       ],
     );
 
-    // ── Qualification questions (FR-030) ────────────────────────────────────
+    // ── Qualification questions ─────────────────────────────────────────────
     //
     // The field names are fixed by QualificationSchema - these are rewordings,
     // not new extraction targets. Note what is missing: Alu Empire runs two

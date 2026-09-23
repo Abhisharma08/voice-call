@@ -230,7 +230,7 @@ export async function testIntegration(formData: FormData): Promise<ActionResult<
     }
 
     // A passing test clears a previous failure, which is how an integration
-    // disabled by PRD 18.2's auth-failure rule gets back into service.
+    // disabled by the auth-failure rule gets back into service.
     if (report.ok) {
       await ctx.tx.query(
         `update integrations set status = 'active', last_error = null, last_verified_at = now(),

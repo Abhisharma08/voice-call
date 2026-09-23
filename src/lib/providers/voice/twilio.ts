@@ -27,7 +27,7 @@ import { ProviderError } from "@/lib/providers/voice/types";
  * ElevenLabs Agents — and ElevenLabs still needs a Twilio number underneath,
  * so this account carries forward either way.
  *
- * PRD 17.3 caveat, unchanged: Twilio's India guidance restricts outbound calls
+ * One caveat: Twilio's India guidance restricts outbound calls
  * to Indian non-Twilio numbers to non-Indian originating numbers [Ref. 7].
  * That constraint applies to any stack where Twilio is the carrier, ElevenLabs
  * included.

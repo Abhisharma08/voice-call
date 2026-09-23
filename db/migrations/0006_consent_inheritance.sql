@@ -9,7 +9,7 @@
 -- What is dropped is the *gate*. What is kept is the *record*: intake still
 -- writes a consents row for every lead, now derived from where the lead came
 -- from, so a call can still cite the specific basis it was placed under.
--- PRD 26.1 wants an evidentiary trail the agency owns; that is satisfied by
+-- The agency needs an evidentiary trail it owns; that is satisfied by
 -- recording it automatically, not by blocking on a human to retype it.
 --
 -- The row is honest about its provenance: captured_by = 'inherited_upstream'
@@ -36,7 +36,7 @@ update campaigns set consent_mode = 'require_record';
 --
 -- It was standing in for "somebody confirmed where these leads came from",
 -- which the upstream funnel now answers. The compliance attestation itself
--- (PRD 17.3) still records what was reviewed, and that is the check that
+-- still records what was reviewed, and that is the check that
 -- actually matters before dialling.
 alter table campaigns drop constraint campaigns_compliance_needs_consent_ck;
 

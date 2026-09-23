@@ -8,12 +8,12 @@ import { revokeAllSessionsForUser } from "@/lib/auth/session";
 import { ROLES } from "@/lib/auth/rbac";
 
 /**
- * Staff, assignments and elevations (PRD 4, 8.2).
+ * Staff, assignments and elevations.
  *
- * PRD 8.2's point is that agency staff should be scoped to their assigned
- * clients by default, and that reaching outside that set "requires an
- * explicit, logged elevation rather than being available by default because
- * the agency 'has access to everything.'" These actions are that mechanism.
+ * Agency staff are scoped to their assigned clients by default. Reaching
+ * outside that set requires an explicit, logged elevation rather than being
+ * available by default because the agency "has access to everything". These
+ * actions are that mechanism.
  */
 
 const CreateUser = z.object({
@@ -183,7 +183,7 @@ const Elevation = z.object({
 });
 
 /**
- * PRD 8.2's explicit, logged elevation.
+ * the explicit, logged elevation.
  *
  * Time-boxed by construction - there is no "permanent" option - because an
  * elevation that never expires is just an assignment with extra steps, and the

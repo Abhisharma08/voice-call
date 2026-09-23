@@ -12,19 +12,19 @@ import type {
 import { ProviderError } from "@/lib/providers/voice/types";
 
 /**
- * Sarvam AI voice agent provider (PRD 10.4).
+ * Sarvam AI voice agent provider.
  *
- * Chosen for the reason PRD 17.3 gives: provider selection here is a
+ * Chosen for one reason: provider selection here is a
  * compliance decision, not a technology preference. Sarvam is India-based,
  * runs Indian-language speech models, and its telephony connections are Indian
  * carriers (Exotel, Smartflo, Vobiz and others) - which sidesteps the
  * constraint that makes a global provider awkward for Indian outbound, where
  * calls to Indian non-Twilio numbers can only originate from non-Indian
- * numbers [PRD Ref. 7].
+ * numbers.
  *
  * That is a *fit* argument, not a compliance clearance. The agency still needs
  * its own sender/telemarketer registration and consent evidence before dialling
- * (PRD 17.3), which is what the compliance gate exists to enforce.
+ *, which is what the compliance gate exists to enforce.
  *
  * API surface used:
  *   POST /api/outbounds/v1/orgs/{org}/workspaces/{ws}/outbounds   -> attempt_id
@@ -258,7 +258,7 @@ export class SarvamVoiceProvider implements VoiceProvider {
    * the payload, so a caller who has seen one legitimate callback could replay
    * it. Two things bound the damage: `recordCallResult` is idempotent on
    * (provider, provider_call_id) and ignores a second terminal event
-   * (PRD 18.1), and the endpoint still requires a bearer service token. Treat
+   *, and the endpoint still requires a bearer service token. Treat
    * this as defence in depth, and put the callback URL behind a network
    * allowlist in production if the provider offers source IPs.
    */
@@ -382,7 +382,7 @@ export class SarvamVoiceProvider implements VoiceProvider {
 
     const detail = (await response.text().catch(() => "")).slice(0, 300);
 
-    // Same failure classes as the integrations (PRD 18.2): auth is permanent,
+    // Same failure classes as the integrations: auth is permanent,
     // 429 and 5xx are worth retrying.
     if (response.status === 401 || response.status === 403) {
       throw new ProviderError(`Sarvam auth failure: ${detail}`, false, "auth");

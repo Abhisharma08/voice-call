@@ -12,7 +12,7 @@ interface Tenant {
 
 /**
  * Choosing a client here only asks the server to enter that tenant. The server
- * re-checks the grant on every request (PRD 8.2), so a tampered value in this
+ * re-checks the grant on every request, so a tampered value in this
  * control grants nothing.
  */
 export function TenantSwitcher({

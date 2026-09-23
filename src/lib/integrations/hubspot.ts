@@ -1,15 +1,14 @@
 import { openSecret, type SealedSecret } from "@/lib/crypto/kms";
 
 /**
- * HubSpot CRM integration (PRD 13.1, FR-042).
+ * HubSpot CRM integration.
  *
- * "Current HubSpot CRM contact APIs support updating individual contacts or
- * batches, including using record IDs or unique properties." [Ref. 2]
+ * HubSpot's contact API updates individual contacts or batches, by record id
+ * or by a unique property.
  *
- * The update is a PATCH of current-state properties, which is what makes
- * PRD 18.1's claim true - "CRM update can be retried safely by setting the
- * same current-state properties" - so the outbox can retry without a
- * conditional check.
+ * The update is a PATCH of current-state properties, which is what makes it
+ * safe to retry: setting the same values again is a no-op, so the outbox can
+ * retry without a conditional check.
  */
 
 const API_BASE = "https://api.hubapi.com";
@@ -39,7 +38,7 @@ export class IntegrationError extends Error {
   }
 }
 
-/** PRD 13.1's custom property map, plus the AI outcome fields. */
+/** the custom property map, plus the AI outcome fields. */
 export interface ContactUpdate {
   lastCallStatus: string;
   lastCallAt: string;
@@ -145,7 +144,7 @@ export class HubSpotClient {
     }
   }
 
-  /** FR-043: create the follow-up task that carries the call context. */
+  /** Create the follow-up task that carries the call context. */
   async createTask(args: {
     contactId: string;
     subject: string;
@@ -184,8 +183,8 @@ export class HubSpotClient {
   }
 
   /**
-   * Create the custom contact properties this platform writes (PRD 13.1
-   * "Custom properties: dnc, last_call, next_call, AI outcome").
+   * Create the custom contact properties this platform writes: dnc,
+   * last_call, next_call and the AI outcome.
    *
    * HubSpot rejects a PATCH naming a property that does not exist, so without
    * this every CRM sync for a fresh portal fails with a 400 that reads like a
@@ -260,7 +259,7 @@ export class HubSpotClient {
 
     const detail = await response.text().catch(() => "");
 
-    // PRD 18.2's failure classes: auth failures are not retried and should
+    // the failure classes: auth failures are not retried and should
     // disable the integration; 429 and 5xx are.
     if (response.status === 401 || response.status === 403) {
       throw new IntegrationError(`HubSpot auth failure: ${detail.slice(0, 200)}`, false, response.status);

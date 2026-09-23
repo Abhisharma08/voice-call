@@ -11,7 +11,7 @@ function result(overrides: Partial<QualificationResult> = {}): QualificationResu
   return { ...unknownResult("test"), confidence: 0.95, ...overrides };
 }
 
-describe("phone normalisation (FR-011, FR-012)", () => {
+describe("phone normalisation", () => {
   it("normalises an Indian mobile to E.164", () => {
     const r = normalizePhone("98765 43210", "IN");
     expect(r.ok).toBe(true);
@@ -28,7 +28,7 @@ describe("phone normalisation (FR-011, FR-012)", () => {
   });
 
   it("normalises the same number written several ways to one value", () => {
-    // This is what makes the dedupe blind index work (FR-013).
+    // This is what makes the dedupe blind index work.
     const forms = ["+91 98765 43210", "098765 43210", "+919876543210", "9876543210"];
     const normalised = forms.map((f) => {
       const r = normalizePhone(f, "IN");
@@ -80,7 +80,7 @@ describe("phone normalisation (FR-011, FR-012)", () => {
   });
 });
 
-describe("calling windows (FR-021)", () => {
+describe("calling windows", () => {
   const window = { windowStart: "09:30", windowEnd: "18:30", timezone: "Asia/Kolkata" };
 
   it("parses HH:MM and rejects nonsense", () => {
@@ -142,7 +142,7 @@ describe("calling windows (FR-021)", () => {
   });
 });
 
-describe("retry policy (FR-024, W04)", () => {
+describe("retry policy (W04)", () => {
   const now = new Date("2026-09-01T10:00:00Z");
 
   it("schedules a no-answer retry from the ladder", () => {
@@ -205,8 +205,8 @@ describe("retry policy (FR-024, W04)", () => {
   });
 });
 
-describe("scoring rubric (PRD 11.2)", () => {
-  it("scores the PRD's worked example as hot", () => {
+describe("scoring rubric", () => {
+  it("scores the worked example as hot", () => {
     // "Actively searching; requests advisor", 0-3 months, budget, 2BHK -> 90
     const { score } = scoreResult(
       result({
@@ -221,7 +221,7 @@ describe("scoring rubric (PRD 11.2)", () => {
     expect(score).toBe(90);
   });
 
-  it("awards nothing for fields the model left null (FR-032)", () => {
+  it("awards nothing for fields the model left null", () => {
     const { score } = scoreResult(result({ intent: "warm", still_interested: true }));
     expect(score).toBe(DEFAULT_RUBRIC.currentNeedConfirmed);
   });
@@ -250,7 +250,7 @@ describe("scoring rubric (PRD 11.2)", () => {
   });
 });
 
-describe("routing thresholds (PRD 11.3)", () => {
+describe("routing thresholds", () => {
   it("routes a high score to human sales", () => {
     expect(decideRouting(result({ intent: "hot" }), 82).action).toBe("hot_sales_routing");
   });
@@ -284,7 +284,7 @@ describe("routing thresholds (PRD 11.3)", () => {
   });
 });
 
-describe("review gate (FR-035, PRD 26.3)", () => {
+describe("review gate", () => {
   const base = {
     confidenceThreshold: 0.75,
     boundaryBand: 5,
@@ -374,7 +374,7 @@ describe("review gate (FR-035, PRD 26.3)", () => {
   });
 });
 
-describe("qualification schema (FR-031, FR-032)", () => {
+describe("qualification schema", () => {
   it("accepts a well-formed result", () => {
     expect(QualificationSchema.safeParse(result({ intent: "hot" })).success).toBe(true);
   });

@@ -129,7 +129,7 @@ export const tenants = pgTable("tenants", {
 
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
-  /** null = agency-global staff. Clients never log in (PRD 14.3). */
+  /** null = agency-global staff. Clients never log in. */
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
@@ -160,7 +160,7 @@ export const userTenantAssignments = pgTable(
   ],
 );
 
-/** PRD 8.2: access outside an assignment requires explicit, logged elevation. */
+/** Access outside an assignment requires explicit, logged elevation. */
 export const accessElevations = pgTable("access_elevations", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id")
@@ -285,11 +285,11 @@ export const leads = pgTable(
     campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
     hubspotRecordId: text("hubspot_record_id"),
     source: text("source"),
-    /** PRD 26.2: direct identifiers are AES-256-GCM ciphertext at rest. */
+    /** Direct identifiers are AES-256-GCM ciphertext at rest. */
     nameEnc: bytea("name_enc"),
     phoneEnc: bytea("phone_enc"),
     emailEnc: bytea("email_enc"),
-    /** Tenant-salted HMAC, for dedupe (FR-013) and DNC lookup (PRD 17.4). */
+    /** Tenant-salted HMAC, for dedupe and DNC lookup. */
     phoneBidx: text("phone_bidx"),
     emailBidx: text("email_bidx"),
     phoneLast4: text("phone_last4"),
@@ -361,11 +361,11 @@ export const callAttempts = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     durationSec: integer("duration_sec"),
-    /** PRD 21 lead-to-call latency, stamped at dial time (migration 0013). */
+    /** Lead-to-call latency, stamped at dial time (migration 0013). */
     queueLatencySec: integer("queue_latency_sec"),
     recordingRef: text("recording_ref"),
     failureReason: text("failure_reason"),
-    /** PRD 26.1: consent basis stamped at call time, so each call is justifiable. */
+    /** Consent basis stamped at call time, so each call is justifiable. */
     consentId: uuid("consent_id").references(() => consents.id, { onDelete: "set null" }),
     consentBasis: consentBasis("consent_basis"),
     campaignConfigVersion: integer("campaign_config_version"),
@@ -408,7 +408,7 @@ export const callAnalyses = pgTable("call_analyses", {
   confidence: numeric("confidence", { precision: 4, scale: 3 }),
   model: text("model"),
   promptVersion: text("prompt_version"),
-  /** FR-035 / PRD 26.3: default is held for review, not auto-committed. */
+  /** Default is held for review, not auto-committed. */
   reviewStatus: reviewStatus("review_status").notNull().default("pending_review"),
   reviewReason: text("review_reason"),
   reviewedBy: uuid("reviewed_by").references(() => users.id),
@@ -464,7 +464,7 @@ export const syncOutbox = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     target: syncTarget("target").notNull(),
-    /** PRD 18.1 idempotency: sheet write dedupe key = call_id. */
+    /** Idempotency: the sheet write dedupe key is the call id. */
     dedupeKey: text("dedupe_key").notNull(),
     payload: jsonb("payload").notNull(),
     status: syncStatus("status").notNull().default("pending"),

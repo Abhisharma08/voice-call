@@ -8,14 +8,14 @@ import { RevealButton } from "./reveal-button";
 export const dynamic = "force-dynamic";
 
 /**
- * Lead detail (PRD 14.4).
+ * Lead detail.
  *
- * PRD 14.4 asks for identity and source, latest intent and score, full call
+ * Identity and source, latest intent and score, full call
  * history, transcript/summary "according to access policy", the next callback,
  * CRM sync status and an audit timeline.
  *
  * "According to access policy" is doing real work: the transcript is high
- * sensitivity under PRD 26.2, so this page shows the model's summary by
+ * sensitivity, so this page shows the model's summary by
  * default and gates the transcript itself behind an explicit, audited reveal.
  */
 export default async function LeadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -176,7 +176,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
         </Card>
       </div>
 
-      {/* PRD 26.1: the evidentiary trail for why this person could be called. */}
+      {/* The evidentiary trail for why this person could be called. */}
       <Section title="Consent">
         {data.consents.length === 0 ? (
           <div className="empty">
@@ -220,7 +220,7 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
                   {c.consent_basis ? ` · ${c.consent_basis}` : ""}
                 </span>
               </div>
-              {/* The summary, not the transcript: PRD 26.2 treats recorded
+              {/* The summary, not the transcript: recorded
                   content as independently regulated and gates it separately. */}
               {c.summary ? <div style={{ fontSize: 13 }}>{c.summary}</div> : null}
             </div>

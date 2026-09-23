@@ -22,7 +22,7 @@ import { logger } from "@/lib/observability/log";
  * Drains sync_outbox (workflow W03 steps 7-9).
  *
  * One deliberate constraint runs through this file: a row is only ever built
- * from a *committed* analysis. PRD 26.3 holds pending_review results back from
+ * from a *committed* analysis. A pending_review result is held back from
  * Sheets and HubSpot, and the SQL below re-checks review_status rather than
  * trusting that the enqueue side got it right - the outbox row and the review
  * decision are written in the same transaction, but an operator can still
@@ -126,7 +126,7 @@ export async function drainSyncOutbox(
       result.failed += 1;
 
       if (err instanceof IntegrationError && !err.retryable && err.status === 401) {
-        // PRD 18.2: "Auth failure - No - Alert + integration disabled."
+        // "Auth failure - No - Alert + integration disabled."
         await disableIntegration(tx, item, err.message);
       }
     }
@@ -202,7 +202,7 @@ async function loadContext(tx: PoolClient, callId: string): Promise<SyncContext 
   return r.rows[0] ?? null;
 }
 
-/** PRD 26.3: nothing leaves the platform while a result is held for review. */
+/** Nothing leaves the platform while a result is held for review. */
 function committed(ctx: SyncContext): boolean {
   return ["auto_approved", "confirmed", "corrected"].includes(ctx.review_status);
 }
@@ -225,7 +225,7 @@ async function syncSheets(tx: PoolClient, item: OutboxItem, deps: SyncDeps): Pro
     hubspot_record_id: ctx.hubspot_record_id ?? "",
     source: ctx.lead_source ?? "",
     name: decryptPiiOrNull(ctx.name_enc) ?? "",
-    // The full number, at the operator's explicit choice. PRD 26.2 masked it
+    // The full number, at the operator's explicit choice. It is masked
     // because a sheet sits outside this platform's access control and audit
     // log - which is still true, and is now a property of the spreadsheet's
     // own sharing rather than of this row. A call log nobody can call from
@@ -303,7 +303,7 @@ async function syncHubSpot(tx: PoolClient, item: OutboxItem, deps: SyncDeps): Pr
     dnc: ctx.do_not_call,
   });
 
-  // FR-043: a follow-up task with the call context, for the human who picks
+  // A follow-up task with the call context, for the human who picks
   // this lead up.
   if (ctx.human_followup || ctx.callback_requested) {
     await client.createTask({
@@ -333,7 +333,7 @@ async function notify(tx: PoolClient, item: OutboxItem, deps: SyncDeps): Promise
 
   const payload = ctx.structured_payload as Record<string, unknown>;
 
-  // PRD 16's hot-lead notification. The recipient is a client sales contact
+  // the hot-lead notification. The recipient is a client sales contact
   // outside the platform, so the phone number is masked here too.
   const message: NotificationPayload = {
     tenantName: ctx.tenant_name,

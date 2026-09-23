@@ -5,10 +5,10 @@ import { withTenant } from "@/lib/auth/tenant";
 export const dynamic = "force-dynamic";
 
 /**
- * Call history (PRD 12, 14.2).
+ * Call history.
  *
  * Each row carries the consent basis it was placed under and the campaign
- * config version it ran against - PRD 26.1 and PRD 9 respectively. Those two
+ * config version it ran against. Those two
  * columns are what make a call individually justifiable months later, which is
  * the whole reason they are stamped at call time rather than joined at read
  * time.
@@ -127,7 +127,7 @@ export default async function CallsPage() {
                       "—"
                     )}
                   </td>
-                  {/* PRD 26.1: the basis this specific call was placed under. */}
+                  {/* The basis this specific call was placed under. */}
                   <td style={{ fontSize: 12, color: "var(--muted)" }}>
                     {c.consent_basis ?? "—"}
                   </td>

@@ -93,7 +93,7 @@ beforeAll(async () => {
        values ($1, $2, 'Slice Campaign', 'residential_property', 'Test context', 'Hello', 'Asia/Kolkata', true,
                'mock', $3::jsonb, $4::jsonb, '{}'::jsonb, now(), 'sheet-1', 'Call Log!A:V', 0.750, 5,
                -- Migration 0005 forbids a compliance approval without a
-               -- recorded consent basis for the list (PRD 14.3 step 10).
+               -- recorded consent basis for the list.
                'opt_in_form', 'slice_test_list')
        on conflict (id) do nothing`,
       [
@@ -222,7 +222,7 @@ async function runToAnalysis(phone: string): Promise<{ leadId: string; callId: s
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
-describe("intake (FR-010 to FR-014)", () => {
+describe("intake", () => {
   it("queues an eligible lead with consent", async () => {
     const outcome = await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
     expect(outcome.status).toBe("queued");
@@ -238,11 +238,11 @@ describe("intake (FR-010 to FR-014)", () => {
 
     expect(lead?.status).toBe("queued");
     expect(lead?.phone_last4).toBe("3210");
-    // PRD 26.2: the number is ciphertext in the column, not plaintext.
+    // The number is ciphertext in the column, not plaintext.
     expect(lead?.phone_enc.toString("utf8")).not.toContain("9876543210");
   });
 
-  it("quarantines a lead with no callable number and records why (FR-012)", async () => {
+  it("quarantines a lead with no callable number and records why", async () => {
     const outcome = await withScope(scope, (tx) =>
       ingestLead(tx, leadEvent("+919876543210", { contact: { name: "No Phone", phone: null } })),
     );
@@ -259,7 +259,7 @@ describe("intake (FR-010 to FR-014)", () => {
   });
 
   it("queues a lead with no consent declared anywhere (migration 0008)", async () => {
-    // PRD 26.1 read "a lead may not be queued unless an active consents record
+    // The rule: a lead may not be queued unless an active consents record
     // exists", written when this platform was assumed to be where consent
     // first became known. It is not: the landing page or lead form collects it
     // and the lead reaches HubSpot before we see it. So nothing on the event
@@ -305,7 +305,7 @@ describe("intake (FR-010 to FR-014)", () => {
   });
 
   it("queues a lead with no event consent when the campaign declares a basis", async () => {
-    // PRD 14.3 step 10: the Campaign Manager records the basis for the
+    // The Campaign Manager records the basis for the
     // client's list once, and every lead from that list cites it.
     const outcome = await withScope(scope, (tx) =>
       ingestLead(tx, leadEvent("+919876543210", { consent: null })),
@@ -324,7 +324,7 @@ describe("intake (FR-010 to FR-014)", () => {
     expect(consent?.captured_by).toBe("campaign_declaration");
   });
 
-  it("deduplicates a repeated event rather than creating a second lead (FR-013)", async () => {
+  it("deduplicates a repeated event rather than creating a second lead", async () => {
     const first = await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
     const second = await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
 
@@ -351,7 +351,7 @@ describe("intake (FR-010 to FR-014)", () => {
     expect(second.leadId).toBe(first.leadId);
   });
 
-  it("suppresses a lead already on the tenant DNC list (PRD 17.4)", async () => {
+  it("suppresses a lead already on the tenant DNC list", async () => {
     await asGlobal(async () => {
       await owner.query(
         `insert into dnc_entries (tenant_id, scope, phone_bidx, source)
@@ -393,7 +393,7 @@ describe("intake (FR-010 to FR-014)", () => {
   });
 });
 
-describe("calling worker (FR-020 to FR-025)", () => {
+describe("calling worker", () => {
   it("places a call and writes a durable record before dialling", async () => {
     await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
 
@@ -422,11 +422,11 @@ describe("calling worker (FR-020 to FR-025)", () => {
       ).rows[0],
     );
 
-    // PRD 26.1: the consent basis is stamped at call time.
+    // The consent basis is stamped at call time.
     expect(call?.consent_basis).toBe("opt_in_form");
     expect(call?.attempt_no).toBe(1);
 
-    // PRD 21's lead-to-call latency, stamped at dial time so the analytics
+    // the lead-to-call latency, stamped at dial time so the analytics
     // page never has to join every attempt back to its lead (migration 0013).
     expect(call?.queue_latency_sec).not.toBeNull();
     expect(call!.queue_latency_sec!).toBeGreaterThanOrEqual(0);
@@ -456,7 +456,7 @@ describe("calling worker (FR-020 to FR-025)", () => {
     expect(second.dialled).toHaveLength(0);
   });
 
-  it("respects the campaign concurrency cap (FR-022)", async () => {
+  it("respects the campaign concurrency cap", async () => {
     await asGlobal(() => owner.query(`update campaigns set concurrency_limit = 2 where id = $1`, [CAMPAIGN]));
 
     for (const phone of ["+919876543210", "+919876543310", "+919876543410"]) {
@@ -476,7 +476,7 @@ describe("calling worker (FR-020 to FR-025)", () => {
     await asGlobal(() => owner.query(`update campaigns set concurrency_limit = 5 where id = $1`, [CAMPAIGN]));
   });
 
-  it("defers the queue outside the calling window (FR-021)", async () => {
+  it("defers the queue outside the calling window", async () => {
     await asGlobal(() =>
       owner.query(
         `update campaigns set calling_config = jsonb_set(
@@ -512,7 +512,7 @@ describe("calling worker (FR-020 to FR-025)", () => {
     );
   });
 
-  it("requeues with backoff when the provider fails transiently (PRD 18.2)", async () => {
+  it("requeues with backoff when the provider fails transiently", async () => {
     // The mock treats a number ending in 9 as a transient provider failure.
     await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543219")));
 
@@ -539,7 +539,7 @@ describe("calling worker (FR-020 to FR-025)", () => {
   });
 });
 
-describe("call results and retries (FR-023, FR-024, PRD 18.1)", () => {
+describe("call results and retries", () => {
   it("ignores a duplicate terminal webhook", async () => {
     await withScope(scope, (tx) => ingestLead(tx, leadEvent("+919876543210")));
     const tick = await withScope(scope, (tx) =>
@@ -656,7 +656,7 @@ describe("call results and retries (FR-023, FR-024, PRD 18.1)", () => {
   });
 });
 
-describe("qualification and the review gate (FR-030 to FR-035, PRD 26.3)", () => {
+describe("qualification and the review gate", () => {
   it("auto-approves a confident hot result and enqueues the syncs", async () => {
     stubAnthropic(() => ({
       ...unknownResult(""),
@@ -699,7 +699,7 @@ describe("qualification and the review gate (FR-030 to FR-035, PRD 26.3)", () =>
     ]);
   });
 
-  it("holds a low-confidence result and enqueues nothing (FR-035)", async () => {
+  it("holds a low-confidence result and enqueues nothing", async () => {
     stubAnthropic(() => ({
       ...unknownResult(""),
       intent: "hot",
@@ -727,7 +727,7 @@ describe("qualification and the review gate (FR-030 to FR-035, PRD 26.3)", () =>
     expect(analysis?.review_status).toBe("pending_review");
     expect(analysis?.review_reason).toMatch(/confidence/);
 
-    // PRD 26.3: excluded from auto-sync until an operator resolves it.
+    // Excluded from auto-sync until an operator resolves it.
     const outbox = await withScope(scope, async (tx) =>
       (await tx.query(`select 1 from sync_outbox`)).rowCount,
     );
@@ -767,7 +767,7 @@ describe("qualification and the review gate (FR-030 to FR-035, PRD 26.3)", () =>
     expect(analysis?.review_reason).toMatch(/still_interested/);
   });
 
-  it("suppresses permanently on a confident do-not-call (FR-025, PRD 7.4)", async () => {
+  it("suppresses permanently on a confident do-not-call", async () => {
     stubAnthropic(() => ({
       ...unknownResult(""),
       intent: "do_not_call",
@@ -840,7 +840,7 @@ describe("qualification and the review gate (FR-030 to FR-035, PRD 26.3)", () =>
       ).rows[0],
     );
 
-    // PRD 18.2: "LLM schema failure -> Fallback to manual review."
+    // "LLM schema failure -> Fallback to manual review."
     expect(analysis?.intent).toBe("unknown");
     expect(analysis?.review_status).toBe("pending_review");
   });
@@ -858,7 +858,7 @@ describe("qualification and the review gate (FR-030 to FR-035, PRD 26.3)", () =>
   });
 });
 
-describe("review resolution (PRD 26.3)", () => {
+describe("review resolution", () => {
   it("releases a confirmed result to the sync queue", async () => {
     stubAnthropic(() => ({
       ...unknownResult(""),
@@ -946,7 +946,7 @@ describe("review resolution (PRD 26.3)", () => {
       ).rows[0],
     );
 
-    // PRD 26.3: "correction logged to audit_events with actor_type=human".
+    // "correction logged to audit_events with actor_type=human".
     expect(audit?.actor_type).toBe("user");
     expect(audit?.metadata.changed_fields).toContain("intent");
   });
@@ -983,7 +983,7 @@ describe("review resolution (PRD 26.3)", () => {
   });
 });
 
-describe("sync outbox (PRD 18.2)", () => {
+describe("sync outbox", () => {
   it("does not send a held result even if a row is enqueued", async () => {
     stubAnthropic(() => ({
       ...unknownResult(""),
@@ -1045,7 +1045,7 @@ describe("sync outbox (PRD 18.2)", () => {
     const args = appendRow.mock.calls[0] as unknown as [{ row: Record<string, string> }];
     const row = args[0].row;
 
-    // The full number, not "******3210". PRD 26.2 masked this because a sheet
+    // The full number, not "******3210". This is masked elsewhere because a sheet
     // sits outside the platform's access control and audit log - still true,
     // and now a property of who the spreadsheet is shared with rather than of
     // this row. Changed deliberately: a call log you cannot call from sent the
@@ -1062,7 +1062,7 @@ describe("sync outbox (PRD 18.2)", () => {
 
   it("still masks the phone number in a Slack notification", async () => {
     // The sheet is a destination the operator chose and controls sharing on.
-    // A chat notification is neither, so it keeps the PRD 26.2 masking.
+    // A chat notification is neither, so it keeps the masking.
     stubAnthropic(() => ({
       ...unknownResult(""),
       intent: "hot",
@@ -1144,7 +1144,7 @@ describe("sync outbox (PRD 18.2)", () => {
   });
 });
 
-describe("tenant isolation across the pipeline (PRD 8.2)", () => {
+describe("tenant isolation across the pipeline", () => {
   it("does not let another tenant's scope see these leads or calls", async () => {
     stubAnthropic(() => ({
       ...unknownResult(""),

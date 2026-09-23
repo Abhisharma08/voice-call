@@ -56,7 +56,7 @@ async function main() {
 
     const byEmail = new Map(users.rows.map((u) => [u.email, u.id]));
 
-    // PRD 8.2: non-admin staff are scoped to assignments. The Campaign Manager
+    // Non-admin staff are scoped to assignments. The Campaign Manager
     // gets one client, the Ops Manager gets both, the Analyst gets one - so a
     // fresh checkout can demonstrate a denied cross-tenant access immediately.
     await client.query(

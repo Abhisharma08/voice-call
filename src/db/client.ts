@@ -8,7 +8,7 @@ import { logger } from "@/lib/observability/log";
  *   owner   - migrations and admin scripts only. Owns the tables.
  *   app     - Next.js request handling for authenticated staff. RLS enforced.
  *   service - n8n workers and background jobs. RLS enforced, no access to
- *             staff accounts or sessions (PRD 4: "service identity only").
+ *             staff accounts or sessions ("service identity only").
  *
  * Nothing in the request path may use the owner pool. RLS is only meaningful
  * against a non-owner role, and `force row level security` in migration 0002
@@ -64,13 +64,11 @@ export async function closePools(): Promise<void> {
 
 /**
  * The scope a transaction runs under. Built by the tenant middleware from the
- * authenticated session, never from a request body or query parameter
- * (PRD 8.2: "Application authorization must derive tenant context from the
- * authenticated session, not from user-supplied request fields").
+ * authenticated session, never from a request body or query parameter.
  */
 export interface TenantScope {
   tenantId: string | null;
-  /** Agency Admin only (PRD 4). Everything else is pinned to one tenant. */
+  /** Agency Admin only. Everything else is pinned to one tenant. */
   globalScope: boolean;
   actorId: string | null;
   actorType: "user" | "service" | "system";

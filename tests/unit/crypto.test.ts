@@ -9,7 +9,7 @@ import {
 } from "@/lib/crypto/pii";
 import { hashPassword, needsRehash, verifyPassword } from "@/lib/crypto/password";
 
-describe("secrets vault (PRD 17.1)", () => {
+describe("secrets vault", () => {
   it("round-trips a credential", () => {
     const token = "pat-na1-0000-1111-2222";
     const sealed = sealSecret(token, "hubspot");
@@ -52,7 +52,7 @@ describe("secrets vault (PRD 17.1)", () => {
   });
 });
 
-describe("PII columns (PRD 26.2)", () => {
+describe("PII columns", () => {
   it("round-trips a phone number", () => {
     const phone = "+919876543210";
     expect(decryptPii(encryptPii(phone))).toBe(phone);
@@ -79,7 +79,7 @@ describe("PII columns (PRD 26.2)", () => {
   });
 });
 
-describe("blind index (FR-013, PRD 17.4)", () => {
+describe("blind index", () => {
   const tenantA = "11111111-1111-1111-1111-111111111111";
   const tenantB = "22222222-2222-2222-2222-222222222222";
 

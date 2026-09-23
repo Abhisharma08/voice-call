@@ -6,8 +6,8 @@ import type { VoiceProvider } from "@/lib/providers/voice/types";
 /**
  * Provider registry. The calling worker resolves by name from
  * `campaigns.voice_provider`, so switching a client to a regional carrier is a
- * configuration change (PRD 10.4, and the compliance-driven provider choice in
- * PRD 17.3).
+ * configuration change - and, since a provider is also a compliance choice, a
+ * decision that can be made per client.
  */
 
 const registry = new Map<string, () => VoiceProvider>();

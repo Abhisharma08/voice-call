@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Fail fast on misconfiguration. PRD 17.1 requires separate production and
+ * Fail fast on misconfiguration. Production and
  * staging credentials and encrypted secrets at rest — a missing or reused key
  * is a security defect, not a warning, so the process refuses to start.
  */
@@ -87,7 +87,7 @@ export function env(): z.infer<typeof schema> {
     );
   }
 
-  // The runtime must never hold owner credentials (PRD 8.2: RLS is only
+  // The runtime must never hold owner credentials (RLS is only
   // enforced against a non-owner role).
   if (e.APP_ENV !== "development" && e.DATABASE_URL_APP === e.DATABASE_URL) {
     throw new Error("DATABASE_URL_APP must not be the migration owner connection");

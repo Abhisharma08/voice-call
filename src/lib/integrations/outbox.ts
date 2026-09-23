@@ -3,14 +3,14 @@ import { backoffDelayMs } from "@/lib/calling/retry";
 import { auditInTx } from "@/lib/audit";
 
 /**
- * Transactional outbox for downstream syncs (PRD 18.2).
+ * Transactional outbox for downstream syncs.
  *
- * "Google Sheets outage - Yes - Store pending sync in DB.
- *  HubSpot outage - Yes - Pending CRM sync."
+ * A Sheets or CRM outage is survivable: the pending sync is stored in the
+ * database and retried, rather than lost with the request that produced it.
  *
  * Rows are written in the same transaction as the analysis they describe, so a
  * committed result always has its sync work queued - the two cannot diverge.
- * A worker then drains them with backoff. PRD 18.1 supplies the dedupe key
+ * A worker then drains them with backoff. The dedupe key
  * (call_id for Sheets), enforced by a unique index rather than by the caller
  * remembering.
  */
@@ -94,7 +94,7 @@ export async function markSyncFailed(
   tx: PoolClient,
   args: { id: string; tenantId: string; attempts: number; error: string; retryable: boolean },
 ): Promise<void> {
-  // PRD 18.2: an auth failure is not retryable - retrying it just burns the
+  // An auth failure is not retryable - retrying it just burns the
   // rate limit and delays the alert. It goes straight to dead-letter.
   const exhausted = !args.retryable || args.attempts >= MAX_SYNC_ATTEMPTS;
 
@@ -113,7 +113,7 @@ export async function markSyncFailed(
   );
 
   if (exhausted) {
-    // PRD 18.3: dead-letter state exists for records requiring manual replay,
+    // Dead-letter state exists for records requiring manual replay,
     // and it must be visible rather than silent.
     await auditInTx(tx, {
       tenantId: args.tenantId,
@@ -126,7 +126,7 @@ export async function markSyncFailed(
   }
 }
 
-/** Operator action: put a dead-lettered row back in the queue (PRD 18.3 replay). */
+/** Operator action: put a dead-lettered row back in the queue. */
 export async function replaySync(tx: PoolClient, id: string): Promise<boolean> {
   const r = await tx.query(
     `update sync_outbox

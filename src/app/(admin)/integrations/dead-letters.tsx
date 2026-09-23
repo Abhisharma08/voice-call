@@ -23,7 +23,7 @@ const TARGET_LABELS: Record<DeadLetter["target"], string> = {
 };
 
 /**
- * Deliveries that exhausted their retries (PRD 18.3).
+ * Deliveries that exhausted their retries.
  *
  * This panel is not a log. Every row here is a qualification result that a
  * client has not received - a hot lead their sales team does not know about -

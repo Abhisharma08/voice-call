@@ -27,7 +27,7 @@ export function analysisProviderNames(): string[] {
 
 /**
  * Throwing here is safe and intended. The one caller wraps analysis in a
- * try/catch that degrades to manual review (PRD 18.2), so a campaign pointed
+ * try/catch that degrades to manual review, so a campaign pointed
  * at an unconfigured provider holds its leads for a human with the reason
  * attached - rather than dialling on and writing results no model produced.
  */

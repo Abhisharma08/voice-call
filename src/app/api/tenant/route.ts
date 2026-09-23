@@ -12,7 +12,7 @@ const Body = z.object({ tenantId: z.string().uuid().nullable() });
 /**
  * Switch the session's active tenant.
  *
- * PRD 8.2: the tenant id in this request is a *request to enter* a tenant, not
+ * The tenant id in this request is a *request to enter* a tenant, not
  * authorization. requireGrant() decides, from the user's assignments and live
  * elevations, whether it is allowed - and logs the attempt either way.
  */
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, tenantId });
   } catch (err) {
     if (err instanceof TenantAccessError) {
-      // PRD 23.3: no disclosure of whether the tenant exists.
+      // No disclosure of whether the tenant exists.
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     throw err;

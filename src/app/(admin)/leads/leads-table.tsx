@@ -19,7 +19,7 @@ export interface LeadRow {
 }
 
 /**
- * The list view never receives a full phone number from the server (PRD 26.2).
+ * The list view never receives a full phone number from the server.
  * "Reveal" is a separate authenticated request that writes an audit row in the
  * same transaction as the decrypt, so the number cannot be read without a
  * trace of who read it.

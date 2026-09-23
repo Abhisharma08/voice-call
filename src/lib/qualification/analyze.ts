@@ -5,17 +5,17 @@ import { logger } from "@/lib/observability/log";
 export { __setAnthropicClient } from "@/lib/qualification/providers/anthropic";
 
 /**
- * Transcript analysis (PRD 10, FR-030 to FR-034), workflow W03 step 3.
+ * Transcript analysis, workflow W03 step 3.
  *
- * Two constraints from the PRD shape this:
+ * Two constraints shape this:
  *
- *   FR-031 "AI must return strict structured result. Schema validation passes
- *   before persistence" - so this uses structured outputs against the Zod
+ *   The model must return a strict structured result, and schema validation passes
+ *   before persistence - so this uses structured outputs against the Zod
  *   schema rather than parsing JSON out of prose.
  *
- *   FR-032 "Unknown answers may be marked unknown; AI must not invent values"
- *   and PRD 10.2 "Never fabricate pricing, availability, eligibility, policy
- *   terms, or product details" - so the system prompt is explicit that null is
+ *   Unknown answers may be marked unknown, and the model must not invent
+ *   values: never fabricate pricing, availability, eligibility, policy
+ *   terms or product details - so the system prompt is explicit that null is
  *   the correct answer for anything the lead did not say, and the review gate
  *   catches the cases where it hedges.
  *
@@ -128,8 +128,8 @@ export async function analyzeTranscript(request: AnalyzeRequest): Promise<Analyz
     });
 
     if (!response.parsed) {
-      // Structured output did not validate. PRD 18.2: "LLM schema failure -
-      // Yes, limited - Fallback to manual review."
+      // Structured output did not validate. A schema failure falls back to
+      // manual review rather than discarding the call.
       return degraded(request, startedAt, "Model response did not satisfy the qualification schema.", {
         inputTokens: response.inputTokens,
         outputTokens: response.outputTokens,
@@ -166,7 +166,7 @@ function degraded(
    * opens one and reads it.
    *
    * So it is logged too. Model and reason only: the transcript and the lead's
-   * details are not diagnostic here and do not belong in a log (PRD 26.2).
+   * details are not diagnostic here and do not belong in a log.
    */
   logger.error("qualification degraded to unknown; result held for review", {
     model: request.campaign.model,

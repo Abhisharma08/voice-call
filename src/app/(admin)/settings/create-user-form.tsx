@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createStaffUser } from "./actions";
 
 /**
- * New staff accounts start with no client assignments. PRD 8.2: scope is
+ * New staff accounts start with no client assignments. Scope is
  * granted deliberately, not inherited from being an employee.
  */
 export function CreateUserForm() {

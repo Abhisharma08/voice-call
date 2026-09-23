@@ -8,7 +8,7 @@ import { CallbackList, type CallbackItem } from "./callback-list";
 export const dynamic = "force-dynamic";
 
 /**
- * The callback worklist (FR-043).
+ * The callback worklist.
  *
  * A callback is the one promise this platform makes on the client's behalf
  * during a call: we will ring you back at that time. The queue keeps it by

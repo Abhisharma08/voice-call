@@ -52,7 +52,7 @@ export const dynamic = "force-dynamic";
  * Everything downstream is unchanged, because this is a different front door
  * onto the same `ingestLead`: dedupe, phone normalisation, consent and the DNC
  * gate are untouched, the idempotency key is still tenant + source event id
- * (PRD 18.1), and a queued lead still dials on this invocation.
+ *, and a queued lead still dials on this invocation.
  *
  *   POST /api/webhooks/hubspot/events
  */
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
 
   const integration = await integrationForPortal(portalId);
 
-  // An unknown portal gets the same answer as a bad signature (PRD 23.3): a
+  // An unknown portal gets the same answer as a bad signature: a
   // caller must not be able to enumerate which portals this platform serves.
   if (!integration?.credentials.clientSecret) {
     await reject(integration ? "no_client_secret_stored" : "unknown_portal", { portalId });
@@ -225,7 +225,7 @@ async function handle(
 /**
  * What goes back to HubSpot. No phone number, no name, no reason text: the
  * response body is written to HubSpot's own delivery log, which is not a place
- * to put a lead's details or an internal message (PRD 26.2).
+ * to put a lead's details or an internal message.
  */
 function publicResult(result: SubscriptionIntakeResult): { eventId: string; status: string } {
   return { eventId: result.eventId, status: result.status };
@@ -297,7 +297,7 @@ async function integrationForPortal(portalId: number): Promise<PortalIntegration
 }
 
 async function reject(reason: string, metadata: Record<string, unknown>): Promise<void> {
-  // PRD 18.2: "Webhook signature invalid - No - Reject + security log."
+  // "Webhook signature invalid - No - Reject + security log."
   await recordUnscopedAudit({
     tenantId: null,
     actorType: "system",

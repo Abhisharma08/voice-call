@@ -96,7 +96,7 @@ describe("login", () => {
   });
 
   it("refuses to log in a service identity", async () => {
-    // PRD 4: the n8n worker is a service identity, not a human surface.
+    // The n8n worker is a service identity, not a human surface.
     expect(await login("auth-worker@agency.test", PASSWORD)).toBeNull();
   });
 
@@ -158,7 +158,7 @@ describe("sessions", () => {
   });
 });
 
-describe("tenant grants (PRD 8.2)", () => {
+describe("tenant grants", () => {
   const manager = {
     id: MANAGER,
     email: "auth-manager@agency.test",
@@ -192,7 +192,7 @@ describe("tenant grants (PRD 8.2)", () => {
     await expect(requireGrant(manager, TENANT_Y)).rejects.toBeInstanceOf(TenantAccessError);
   });
 
-  it("makes an unassigned tenant indistinguishable from a nonexistent one (PRD 23.3)", async () => {
+  it("makes an unassigned tenant indistinguishable from a nonexistent one", async () => {
     const missing = "00000000-0000-4000-8000-00000000dead";
     const unassigned = await requireGrant(manager, TENANT_Y).catch((e: Error) => e.message);
     const nonexistent = await requireGrant(manager, missing).catch((e: Error) => e.message);
@@ -227,7 +227,7 @@ describe("tenant grants (PRD 8.2)", () => {
     expect(await resolveGrant(manager, TENANT_Y)).toBeNull();
   });
 
-  it("logs every denied attempt (PRD 17.1)", async () => {
+  it("logs every denied attempt", async () => {
     await requireGrant(manager, "00000000-0000-4000-8000-00000000beef").catch(() => undefined);
 
     const rows = await asGlobal(async () =>

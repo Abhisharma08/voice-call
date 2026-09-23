@@ -33,7 +33,7 @@ profile with no env var at all.
 (`hot`, `not_interested`, `do_not_call`) rather than `unknown`.
 
 Without a key, analysis degrades to `unknown` at confidence 0, which always
-trips the review gate. That is PRD 18.2's fallback working — nothing is
+trips the review gate. That is the fallback working — nothing is
 auto-qualified — but no result ever reaches a CRM either.
 
 **If the key is an identity-linked one** (scoped to a person rather than a
@@ -58,12 +58,12 @@ Two things behave differently on Gemini, both in `providers/gemini.ts`:
   short one can fall under the model's minimum cacheable length and never hit.
   Per-call cost is less predictable than on Anthropic.
 - **Server-side retention is off.** `store` defaults to true on that API, which
-  would retain transcripts — the most sensitive text here (PRD 26.2). The
+  would retain transcripts — the most sensitive text here. The
   adapter sets `store: false`. Do not change that without a deliberate
   decision.
 
 Both providers validate against the same Zod schema before anything is
-persisted, so FR-031 holds whichever one answers.
+persisted, so schema validation holds whichever one answers.
 
 ---
 
@@ -98,7 +98,7 @@ APP_URL=https://your-tunnel.example.com
 1. HubSpot → Settings → Integrations → **Private Apps** → *Create*
 2. Scopes: `crm.objects.contacts.read`, `crm.objects.contacts.write`,
    `crm.schemas.contacts.write` (needed to create the custom properties),
-   `crm.objects.tasks.write` (for the FR-043 follow-up task)
+   `crm.objects.tasks.write` (for the follow-up task)
 3. Copy the access token — it starts `pat-na1-`
 
 ### Store it
@@ -221,7 +221,7 @@ curl -X POST "$APP_URL/api/webhooks/leads" \
   }'
 ```
 
-Note what is *not* in that payload: a tenant id. PRD 8.2 forbids trusting one
+Note what is *not* in that payload: a tenant id. The platform never trusts one
 from a caller, so the platform derives it from the service token. A second
 client means a second token, not an extra field.
 
@@ -447,7 +447,7 @@ the call record the SID names. The TwiML endpoint additionally checks a
 call-bound token in the URL, so it cannot be driven for an arbitrary call.
 
 **India.** Twilio's guidance restricts outbound calls to Indian non-Twilio
-numbers to non-Indian originating numbers [PRD Ref. 7]. That applies to any
+numbers to non-Indian originating numbers. That applies to any
 stack where Twilio is the carrier — **including ElevenLabs**, which brings no
 numbers of its own. It is the reason Sarvam is the production option here.
 
@@ -474,7 +474,7 @@ the transcript come back* — and cannot be used to call a real lead list.
 | Provider | Gives you a number? | Trial | India outbound |
 | --- | --- | --- | --- |
 | Sarvam | Yes, after KYC | No documented trial tier | Native — Indian carriers |
-| Twilio | Yes | Free credit, verified numbers only | Restricted: Indian non-Twilio numbers need a non-Indian originating number [PRD Ref. 7] |
+| Twilio | Yes | Free credit, verified numbers only | Restricted: Indian non-Twilio numbers need a non-Indian originating number |
 | ElevenLabs | **No** — bring Twilio or SIP | n/a | Inherits whatever the underlying carrier allows |
 | Plivo / Telnyx / Vonage | Yes | Free credit, verified numbers only | Varies; check per-country rules |
 
@@ -533,7 +533,7 @@ numbers can only originate from non-Indian numbers, and recommends legal
 review [Ref. 7]. TRAI's TCCCPR rules govern registered headers and consent for
 commercial voice calls [Refs. 4–6].
 
-The PRD's reading is that **the agency**, not the client, is the party
+The reading here is that **the agency**, not the client, is the party
 initiating commercial communication — so the agency's own sender/telemarketer
 registration is what is engaged. Confirm that with telecom counsel before
 picking a provider, because the answer changes which providers are viable.
@@ -609,7 +609,7 @@ Then check, in order:
 | Your Google Sheet | One row per committed call, phone **masked** |
 | `/audit` | The whole journey, including who revealed a phone number |
 
-The phone number is masked in the sheet on purpose. PRD 26.2: once data leaves
+The phone number is masked in the sheet on purpose. Once data leaves
 PostgreSQL, it is outside the platform's access-control layer.
 
 ---
@@ -622,14 +622,14 @@ PostgreSQL, it is outside the platform's access-control layer.
 | HubSpot sync 400s | Custom properties missing — press *Test connection* |
 | Sheets sync 404s | Spreadsheet not shared with the service account |
 | `Unable to parse range: Call Log!A1:V1` | Was a bug in this platform, fixed. A tab name with a space must be quoted in A1 notation (`'Call Log'!A1:V1`); the client now quotes it, and creates the tab if it does not exist |
-| Integration flips to `error` and stops | PRD 18.2: auth failure disables rather than retrying. Fix the credential, press *Test connection* to re-enable |
+| Integration flips to `error` and stops | Auth failure disables rather than retrying. Fix the credential, press *Test connection* to re-enable |
 | Call results never arrive | `APP_URL` is stale or the tunnel died |
 | Campaign will not start calling | Open items on the checklist |
 | Leads suppressed as `no_consent` | Gone as of migration 0008. Leads the old gate stranded were re-queued by it; if you still see this, the migration has not been applied |
 | Leads suppressed as `consent_withdrawn` | A `consents` row for that lead is marked withdrawn — an opt-out after the form. Working as intended |
 | Leads suppressed as `not_on_dial_allowlist` | The campaign has a dial allowlist set, for a trial provider account. Clear it to go live |
 | Trial call connects but cuts off | Twilio trial calls are capped at 10 minutes |
-| Only 5 leads dialled | `concurrency_limit` on the campaign (FR-022). Working as intended |
+| Only 5 leads dialled | `concurrency_limit` on the campaign. Working as intended |
 | `Unknown voice provider "sarvam"` | Not all six `SARVAM_*` vars are set, or the server was not restarted |
 | `Unknown voice provider "twilio"` | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` or `TWILIO_FROM_NUMBER` missing, or no restart |
 | Twilio: "the destination number is not verified" | Trial account. Verify the number in the Twilio console and add it to the dial allowlist |

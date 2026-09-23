@@ -20,21 +20,21 @@ export const dynamic = "force-dynamic";
  * What it covers, none of which intake's own dial can:
  *
  *   - retries on the backoff ladder, which come due minutes or hours later
- *     (PRD 18.2)
- *   - leads queued outside the calling window, released when it opens (FR-021)
+ *
+ *   - leads queued outside the calling window, released when it opens
  *   - callbacks a lead asked for at a specific time, and marking the ones
  *     nobody kept
  *   - leads stranded by an invocation that died mid-call, reclaimed on lock
  *     expiry
  *   - the sync outbox, so a HubSpot or Sheets outage clears itself once the
- *     provider recovers (PRD 18.2)
+ *     provider recovers
  *
  * It is also the safety net under `after()`: if a webhook's post-response work
  * is dropped, the lead is still queued and this pass places the call. Nothing
  * here is the only path to anything.
  *
  * Authentication is a shared secret, not a service token: service tokens are
- * per tenant (PRD 8.2) and this crosses all of them by design. That is the one
+ * per tenant and this crosses all of them by design. That is the one
  * privilege boundary this endpoint widens, so it reads only what it needs to
  * enumerate work, then does the work itself inside per-tenant scopes.
  *

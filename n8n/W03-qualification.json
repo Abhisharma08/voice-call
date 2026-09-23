@@ -32,7 +32,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [40, 0],
-      "notes": "Runs the LLM analysis, validates it against the strict schema (FR-031), scores it against the campaign rubric, and applies the review gate (FR-035). One analysis per call - a duplicate execution returns the existing one."
+      "notes": "Runs the LLM analysis, validates it against the strict schema, scores it against the campaign rubric, and applies the review gate. One analysis per call - a duplicate execution returns the existing one."
     },
     {
       "parameters": {
@@ -55,12 +55,12 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [260, 0],
-      "notes": "PRD 26.3: a held result is excluded from HubSpot and Sheets until an operator confirms or corrects it."
+      "notes": "A held result is excluded from HubSpot and Sheets until an operator confirms or corrects it."
     },
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Held. Nothing syncs. The item is already in the platform's review queue;\n// this branch exists so the Ops alerting channel sees the backlog build\n// (PRD 18.3 / 26.3 SLA escalation).\nreturn [{ json: { review_required: true, analysis: $input.first().json.body } }];"
+        "jsCode": "// Held. Nothing syncs. The item is already in the platform's review queue;\n// this branch exists so the Ops alerting channel sees the backlog build\n// and can escalate against the review SLA.\nreturn [{ json: { review_required: true, analysis: $input.first().json.body } }];"
       },
       "id": "w03-review",
       "name": "Awaiting Human Review",
@@ -84,7 +84,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [480, 90],
-      "notes": "Sheets append, HubSpot update and hot-lead notification all drain from the transactional outbox, so a provider outage retries instead of losing the result (PRD 18.2)."
+      "notes": "Sheets append, HubSpot update and hot-lead notification all drain from the transactional outbox, so a provider outage retries instead of losing the result."
     },
     {
       "parameters": {

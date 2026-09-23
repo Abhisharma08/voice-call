@@ -18,7 +18,7 @@ function captured(fn: () => void): Record<string, unknown>[] {
 
 describe("redact", () => {
   /**
-   * PRD 26.2 puts phone numbers and names in encrypted columns; a log line is
+   * Phone numbers and names live in encrypted columns; a log line is
    * the easiest way for one to get back out. The substring match is what makes
    * this hold as field names multiply - nobody has to maintain an enumeration
    * of every name a phone number is given.

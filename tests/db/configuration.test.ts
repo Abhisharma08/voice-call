@@ -14,7 +14,7 @@ import { claimLeads } from "@/lib/calling/queue";
 /**
  * Phase 2: configuration-driven multi-tenancy.
  *
- * The claim being tested is the PRD's opening design principle - "One reusable
+ * The claim being tested is the platform's opening design principle - "One reusable
  * calling platform; client-specific behavior comes from configuration and
  * tenant-scoped data, not duplicated workflows." So these tests change only
  * configuration and assert the behaviour changes with it.
@@ -347,7 +347,7 @@ describe("activation checklist", () => {
   });
 });
 
-describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", () => {
+describe("campaign consent declaration drives intake", () => {
   const event = (campaignId: string) => ({
     tenantId: TENANT,
     campaignId,
@@ -447,7 +447,7 @@ describe("campaign consent declaration drives intake (PRD 14.3 step 10, 26.1)", 
     expect(claim.skipped[0]?.detail).toBe("consent_withdrawn");
   });
 
-  it("stops a queued lead once its consent is withdrawn (PRD 17.4)", async () => {
+  it("stops a queued lead once its consent is withdrawn", async () => {
     // A 24-hour window, so the assertion is about consent rather than about
     // what time of day the suite happens to run.
     await asGlobal(() =>

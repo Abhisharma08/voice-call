@@ -6,10 +6,10 @@ import { LeadsTable, type LeadRow } from "./leads-table";
 export const dynamic = "force-dynamic";
 
 /**
- * Lead list (PRD 14.4).
+ * Lead list.
  *
- * PRD 26.2 requires phone and email to be "masked in list views, unmasked only
- * on explicit detail-view action", so this query never selects the encrypted
+ * Phone and email are masked in list views and unmasked only on an explicit
+ * detail-view action, so this query never selects the encrypted
  * columns at all - only `phone_last4`, which is stored separately for exactly
  * this purpose. A reveal is a separate, audited request.
  */

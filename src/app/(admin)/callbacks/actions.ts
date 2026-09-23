@@ -8,7 +8,7 @@ import { RESOLUTIONS, rescheduleCallback, resolveCallback } from "@/lib/calling/
 /**
  * Working the callback queue.
  *
- * Both actions need `callback:write`, which PRD 4 gives the Operations
+ * Both actions need `callback:write`, which belongs to the Operations
  * Manager - the same person who owns the review queue, and for the same
  * reason: this is the point where a promise made on a call either gets kept or
  * is written off, and that should be one accountable role rather than anyone

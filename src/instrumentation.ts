@@ -2,7 +2,7 @@ import type { Instrumentation } from "next";
 import { logger } from "@/lib/observability/log";
 
 /**
- * Server error capture (PRD 18.3's alerting signals).
+ * Server error capture (the alerting signals).
  *
  * Before this, an exception that escaped a route handler or a server component
  * reached Next's own default handler, which logs it in a shape nothing else in

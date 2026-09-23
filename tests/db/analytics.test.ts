@@ -4,7 +4,7 @@ import { closePools, withScope, type TenantScope } from "@/db/client";
 import { loadMetrics } from "@/lib/analytics/metrics";
 
 /**
- * The analytics page's metrics (PRD 21).
+ * The analytics page's metrics.
  *
  * The query behind them was rewritten from seventeen independent subqueries
  * into one pass per table using FILTER aggregates, which is exactly the kind

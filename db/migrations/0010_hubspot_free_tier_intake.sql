@@ -15,7 +15,7 @@
 --
 --   2. They cannot carry an Authorization header. They authenticate with
 --      X-HubSpot-Signature-v3, keyed by the private app's client secret. So
---      the tenant cannot come from a service credential (PRD 8.2's usual
+--      the tenant cannot come from a service credential (the usual
 --      rule); it has to be resolved from `portalId` in the payload, and the
 --      signature verified before that resolution is trusted for anything.
 --

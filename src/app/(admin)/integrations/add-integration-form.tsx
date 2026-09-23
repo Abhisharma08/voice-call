@@ -12,7 +12,7 @@ const PLACEHOLDERS: Record<string, string> = {
 };
 
 /**
- * PRD 14.3 steps 2-3. The credential is validated for shape here, while the
+ * The credential is validated for shape here, while the
  * plaintext is still in hand - finding out a service-account key is malformed
  * during a 2am sync is strictly worse than refusing it at paste time.
  */

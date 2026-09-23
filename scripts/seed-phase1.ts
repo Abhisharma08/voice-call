@@ -53,7 +53,7 @@ async function main() {
     );
     await client.query(`delete from integrations where tenant_id = $1`, [tenantId]);
 
-    // ── Integration credentials, envelope-encrypted (PRD 17.1) ──────────────
+    // ── Integration credentials, envelope-encrypted ─────────────────────────
     const hubspotSecret = sealSecret(
       JSON.stringify({ accessToken: "pat-na1-development-placeholder" }),
       "hubspot",
@@ -123,7 +123,7 @@ async function main() {
       ],
     );
 
-    // ── Qualification questions (FR-030) ───────────────────────────────────
+    // ── Qualification questions ────────────────────────────────────────────
     const questions: Array<[string, string, boolean, number]> = [
       ["still_interested", "Are you still actively looking for a property?", true, 1],
       ["timeline", "What is your timeline for making a decision?", true, 2],
@@ -143,7 +143,7 @@ async function main() {
       );
     }
 
-    // ── n8n service identity (PRD 4, 9) ────────────────────────────────────
+    // ── n8n service identity ───────────────────────────────────────────────
     const { token, hash } = generateServiceToken();
     await client.query(`delete from service_tokens where tenant_id = $1 and name = 'n8n-dev'`, [
       tenantId,

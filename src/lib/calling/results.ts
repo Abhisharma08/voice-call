@@ -8,7 +8,7 @@ import type { NormalizedWebhook } from "@/lib/providers/voice/types";
 /**
  * Call result ingestion (W02 step 7, W04).
  *
- * PRD 18.1: "Call result idempotency key = provider + provider_call_id."
+ * "Call result idempotency key = provider + provider_call_id."
  * A provider that delivers the same terminal webhook twice - which they all
  * do eventually - must not produce two transcripts, two analyses, or two
  * decrements of the retry budget.
@@ -45,7 +45,7 @@ export async function recordCallResult(
   // Terminal states are final. A repeat delivery is acknowledged, not replayed.
   if (isTerminal(c.status)) return { status: "duplicate", callId: c.id };
 
-  // Interim statuses (ringing, answered) just update the timeline (FR-023).
+  // Interim statuses (ringing, answered) just update the timeline.
   if (!isTerminal(webhook.status)) {
     await tx.query(`update call_attempts set status = $2 where id = $1`, [c.id, webhook.status]);
     return { status: "recorded", callId: c.id, needsAnalysis: false };
@@ -59,7 +59,7 @@ export async function recordCallResult(
   );
 
   if (webhook.transcript) {
-    // PRD 26.2: transcripts are high-sensitivity content, encrypted at the
+    // Transcripts are high-sensitivity content, encrypted at the
     // application layer like the other PII columns.
     await tx.query(
       `insert into call_transcripts (tenant_id, call_id, transcript_enc, language)
@@ -85,7 +85,7 @@ export async function recordCallResult(
   // A carrier-reported permanent condition - NDNC/DND registration, a number
   // that does not exist - stops all future attempts rather than feeding the
   // retry ladder. Handled before the retry decision, because the ladder would
-  // otherwise schedule a call that must never happen (PRD 17.4).
+  // otherwise schedule a call that must never happen.
   if (webhook.suppress) {
     const phone = decryptPiiOrNull(
       (

@@ -98,7 +98,7 @@ as $$
 $$;
 
 -- Only the human-facing role authenticates. Service identities never log in
--- (PRD 4: "Service identity only"), so they get no access to these at all.
+-- they are service identities only, so they get no access to these at all.
 revoke all on function
   app.login_lookup(text), app.mark_login(uuid),
   app.session_lookup(text), app.session_touch(uuid)

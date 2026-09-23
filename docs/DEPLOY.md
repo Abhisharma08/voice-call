@@ -31,7 +31,7 @@ connecting as the owner has no tenant isolation at all — `FORCE ROW LEVEL
 SECURITY` in migration 0002 closes that loophole, and `env()` refuses to boot
 if `DATABASE_URL_APP` equals `DATABASE_URL` outside development. Two roles
 rather than one keeps the service identity away from staff accounts and
-sessions (PRD 4).
+sessions.
 
 Create the project, then collect **two hostnames**:
 
@@ -86,7 +86,7 @@ is nothing to do — so a CI step that always runs it is safe.
 ## 3. Environment variables
 
 Set these in Vercel for **production** (and again for preview, if you use it,
-pointing at a separate database — PRD 17.1 wants environments to hold separate
+pointing at a separate database — environments must hold separate
 credentials).
 
 Generate the four key values once and keep them safe; losing
@@ -182,7 +182,7 @@ production; there is no long-lived process to run it in.
 ## 6. The first admin
 
 There is no signup — clients never log in, and staff accounts are created by an
-Agency Admin (PRD 14.3). Seed the first one against the production database
+Agency Admin. Seed the first one against the production database
 from your own machine:
 
 ```bash

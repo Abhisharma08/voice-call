@@ -7,10 +7,10 @@ import { auditInTx } from "@/lib/audit";
 /**
  * The calling queue (n8n workflow W02, steps 1-4).
  *
- * PostgreSQL is the queue, per PRD 24's risk register: "Google Sheet used as
- * queue - Medium - PostgreSQL system of record" and "Workflow duplication in
- * n8n - Medium - Use DB state + idempotency keys". n8n schedules the worker;
- * it does not hold the state.
+ * PostgreSQL is the queue. A spreadsheet used as a queue, and a workflow
+ * engine holding the state, are both ways to lose a lead; the database is the
+ * system of record and idempotency keys guard the edges. n8n schedules the
+ * worker; it does not hold the state.
  *
  * Claiming uses `for update skip locked`, so several workers can pull from the
  * same campaign concurrently without handing two of them the same lead - which
@@ -49,8 +49,8 @@ const LOCK_TTL_MS = 5 * 60_000;
  *
  * Every claimed lead is re-checked for eligibility at claim time, not just at
  * intake. A lead can sit in the queue for hours, and a DNC request or consent
- * withdrawal in that gap must stop the call (PRD 17.4: "Manual DNC must
- * immediately invalidate queued calls").
+ * withdrawal in that gap must stop the call: a manual DNC immediately
+ * invalidates queued calls.
  */
 export async function claimLeads(
   tx: PoolClient,
@@ -83,7 +83,7 @@ export async function claimLeads(
     return { claimed: [], skipped: [] };
   }
 
-  // FR-021: outside the window, nothing is claimed and the queue is deferred
+  // Outside the window, nothing is claimed and the queue is deferred
   // to the next opening rather than being drained late at night.
   const decision = isWithinWindow(now, windowFromConfig(c.calling_config, c.timezone));
   if (!decision.allowed) {
@@ -99,7 +99,7 @@ export async function claimLeads(
     };
   }
 
-  // FR-022: concurrency caps at both tenant and campaign level. The tenant cap
+  // Concurrency caps at both tenant and campaign level. The tenant cap
   // is the outer bound, so one busy campaign cannot starve the others.
   const inFlight = await tx.query<{ tenant_calls: string; campaign_calls: string }>(
     `select

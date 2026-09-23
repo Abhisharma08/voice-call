@@ -2,8 +2,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { env, previousKmsKeys } from "@/lib/env";
 
 /**
- * Envelope encryption for integration credentials (PRD 17.1: "Encrypt
- * integration secrets at rest; store only secret references in app/database").
+ * Envelope encryption for integration credentials: secrets are encrypted at
+ * rest, and the database stores only a reference, never a plaintext value.
  *
  * Each secret gets its own random 256-bit data key (DEK). The DEK is wrapped
  * with the master key and stored alongside the ciphertext; the master key

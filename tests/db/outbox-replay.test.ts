@@ -4,7 +4,7 @@ import { closePools, withScope, type TenantScope } from "@/db/client";
 import { MAX_SYNC_ATTEMPTS, claimDueSyncs, enqueueSync, markSyncFailed, replaySync } from "@/lib/integrations/outbox";
 
 /**
- * Dead-lettering and manual replay (PRD 18.3).
+ * Dead-lettering and manual replay.
  *
  * `replaySync` shipped in Phase 1 with nothing able to call it, so its
  * behaviour had never been pinned down. Now that an operator can reach it from
@@ -149,7 +149,7 @@ describe("replaySync", () => {
 
   /**
    * RLS, not a WHERE clause, is what stops this. Another tenant's row is
-   * indistinguishable from one that does not exist (PRD 23.3), which is the
+   * indistinguishable from one that does not exist, which is the
    * same answer the previous test gets.
    */
   it("cannot replay another tenant's dead letter", async () => {

@@ -1,12 +1,11 @@
 import { z } from "zod";
 
 /**
- * The structured qualification result (FR-031, FR-032, PRD Appendix B).
+ * The structured qualification result.
  *
- * FR-031: "AI must return strict structured result. Schema validation passes
- * before persistence."
- * FR-032: "Unknown answers may be marked unknown; AI must not invent values.
- * Unsupported facts are null/unknown."
+ * The model must return a strict structured result, and schema validation
+ * passes before anything is persisted. Unknown answers may be marked unknown;
+ * the model must not invent values, and an unsupported fact is null.
  *
  * Every extracted field is nullable for exactly that reason. A model that
  * cannot find a budget in the transcript must say null, and the rubric in
@@ -34,7 +33,7 @@ export const QualificationSchema = z.object({
 
   /**
    * The model's own read of how confident it is. This drives the review gate
-   * (PRD 26.3), so it is required rather than optional - an absent confidence
+   *, so it is required rather than optional - an absent confidence
    * would silently read as zero or as one depending on the caller.
    */
   confidence: z
@@ -48,7 +47,7 @@ export const QualificationSchema = z.object({
 
   summary: z.string().max(500).describe("Neutral summary of what the lead said"),
 
-  // ── Campaign qualification fields (PRD 10.3) ──────────────────────────────
+  // ── Campaign qualification fields ─────────────────────────────────────────
   still_interested: z.boolean().nullable().describe("null if the lead never addressed it"),
   timeline: z
     .enum(["0-3_months", "3-6_months", "6-12_months", "12_months_plus", "unknown"])
@@ -57,7 +56,7 @@ export const QualificationSchema = z.object({
   location: z.string().nullable().describe("Location of interest as stated, or null"),
   product_interest: z.string().nullable().describe("Specific product or service named, or null"),
 
-  // ── Routing signals (FR-033, FR-034) ──────────────────────────────────────
+  // ── Routing signals ───────────────────────────────────────────────────────
   callback_requested: z.boolean().describe("The lead asked to be called back later"),
   callback_time_iso: z
     .string()
@@ -72,7 +71,7 @@ export type QualificationResult = z.infer<typeof QualificationSchema>;
 
 /**
  * A result the platform can fall back to when analysis fails outright
- * (PRD 18.2: "LLM schema failure - Yes, limited - Fallback to manual review").
+ * ("LLM schema failure - Yes, limited - Fallback to manual review").
  * It never auto-commits: unknown intent with zero confidence always trips the
  * review gate.
  */

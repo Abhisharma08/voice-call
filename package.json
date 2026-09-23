@@ -47,5 +47,11 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
+  },
+  "license": "MIT",
+  "description": "Multi-tenant platform that calls inbound leads with an AI voice agent, qualifies them from the transcript, and syncs the result to a CRM.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Abhisharma08/voice-call.git"
   }
 }

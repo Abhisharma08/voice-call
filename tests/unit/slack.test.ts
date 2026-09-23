@@ -68,7 +68,7 @@ describe("buildMessage", () => {
   });
 
   /**
-   * PRD 26.2: a Slack channel sits outside the platform's access control and
+   * A Slack channel sits outside the platform's access control and
    * its retention belongs to the client, so the full number never goes there.
    * The payload arrives masked from sync-worker and must stay that way.
    */
@@ -130,7 +130,7 @@ describe("SlackNotifier delivery", () => {
   });
 
   /**
-   * PRD 18.2's failure classes. The outbox reads `retryable` to decide between
+   * the failure classes. The outbox reads `retryable` to decide between
    * the backoff ladder and an immediate dead-letter, so the classification is
    * the contract - getting it wrong either buries a real failure under eight
    * retries or abandons a lead over a transient blip.

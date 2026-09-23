@@ -23,7 +23,7 @@ create index if not exists callbacks_tenant_created_idx
 create index if not exists sync_outbox_tenant_status_idx
   on sync_outbox (tenant_id, status);
 
--- Lead-to-call latency (PRD 21), precomputed at dial time.
+-- Lead-to-call latency, precomputed at dial time.
 --
 -- The p95 was the single most expensive thing on the page: it joined every
 -- first attempt back to its lead to subtract two timestamps, which is a hash
@@ -35,7 +35,7 @@ alter table call_attempts
 
 comment on column call_attempts.queue_latency_sec is
   'Seconds from leads.queued_at to this attempt''s started_at, recorded at dial '
-  'time for the PRD 21 lead-to-call metric. Null for attempts placed before '
+  'time for the lead-to-call metric. Null for attempts placed before '
   'migration 0013, and for a lead that was never queued.';
 
 -- Backfill, so the metric does not read as a regression the day this deploys.

@@ -9,7 +9,7 @@ import type { Role } from "@/lib/auth/rbac";
  *
  * The cookie carries a random 256-bit token; only its SHA-256 is stored, so a
  * database dump does not yield usable sessions. Nothing about role or tenant
- * lives in the cookie - PRD 8.2 requires tenant context to be derived from the
+ * lives in the cookie - tenant context has to be derived from the
  * authenticated session server-side, and a self-describing token would put
  * that decision back in the client's hands.
  */

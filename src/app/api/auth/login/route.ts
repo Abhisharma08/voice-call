@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     // Deliberately the same body as a wrong password. Confirming that *this*
     // account is the one being throttled would tell an attacker their guesses
-    // are landing somewhere real (PRD 23.3).
+    // are landing somewhere real.
     return NextResponse.json(
       { error: "Invalid email or password" },
       { status: 429, headers: retryAfterHeaders(denied.verdict) },

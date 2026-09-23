@@ -5,20 +5,20 @@ import type { AuthenticatedUser } from "@/lib/auth/session";
 import { recordAudit } from "@/lib/audit";
 
 /**
- * Tenant middleware (PRD 8.2).
+ * Tenant middleware.
  *
- * "Application authorization must derive tenant context from the authenticated
- * session, not from user-supplied request fields." A tenant id in a URL is
+ * Authorization derives tenant context from the authenticated session, never
+ * from user-supplied request fields. A tenant id in a URL is
  * treated as a *request* to enter that tenant, which this module either grants
  * from the user's assignments or refuses. It is never trusted as proof.
  *
- * "No workflow or API endpoint may accept an arbitrary tenant_id from a public
- * client and trust it as authorization."
+ * No workflow or API endpoint accepts an arbitrary tenant id from a public
+ * client and trusts it as authorization.
  */
 
 export class TenantAccessError extends Error {
   constructor(readonly tenantId: string) {
-    // PRD 23.3: cross-tenant URL manipulation returns 403/404 with no
+    // Cross-tenant URL manipulation returns 403/404 with no
     // disclosure of whether the tenant exists.
     super("Not found");
     this.name = "TenantAccessError";
@@ -75,7 +75,7 @@ export async function resolveGrant(
     const assigned = assignment.rows[0];
     if (assigned) return { tenantId, role: assigned.role, via: "assignment" as const };
 
-    // PRD 8.2: reaching outside the assignment set requires an explicit,
+    // Reaching outside the assignment set requires an explicit,
     // time-boxed, logged elevation - not merely being agency staff.
     const elevation = await tx.query(
       `select 1 from access_elevations
@@ -134,7 +134,7 @@ export async function withTenant<T>(
   return withScope(scopeFor(user, grant), (tx) => fn(tx, grant));
 }
 
-/** Cross-tenant reads for the Agency Admin dashboard only (PRD 14.2 client health). */
+/** Cross-tenant reads for the Agency Admin dashboard only. */
 export async function withGlobalScope<T>(
   user: AuthenticatedUser,
   fn: (tx: PoolClient) => Promise<T>,

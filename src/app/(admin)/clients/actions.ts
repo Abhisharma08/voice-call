@@ -18,12 +18,12 @@ import {
 } from "@/lib/onboarding/templates";
 
 /**
- * Client onboarding (PRD 14.3).
+ * Client onboarding.
  *
- * "The client does not use this platform, log in, or configure anything
- * directly. The agency holds full access to the client's HubSpot, Google
- * Workspace, and (where applicable) voice provider accounts, and a Campaign
- * Manager runs this wizard on the client's behalf."
+ * The client does not use this platform, log in, or configure anything
+ * directly. The agency holds access to the client's HubSpot, Google Workspace
+ * and, where applicable, voice provider accounts, and a Campaign Manager runs
+ * this wizard on the client's behalf.
  *
  * So there is no client-facing signup. Creating a tenant is an Agency Admin
  * action, and every credential stored here is agency-managed.
@@ -68,7 +68,7 @@ export async function createTenant(formData: FormData): Promise<ActionResult<{ i
 
     const id = r.rows[0]!.id;
 
-    // PRD 8.2: agency staff are scoped by assignment. The creator gets one
+    // Agency staff are scoped by assignment. The creator gets one
     // immediately, so the new client is reachable without an elevation - and
     // nobody else silently gains access.
     await ctx.tx.query(
@@ -143,11 +143,11 @@ const AddIntegration = z.object({
 });
 
 /**
- * Store an agency-managed credential for a client (PRD 14.3 steps 2-3).
+ * Store an agency-managed credential for a client.
  *
  * The plaintext is sealed before it touches the database and is never read
- * back into the UI - `integrations` shows a status, never a secret. PRD 17.1:
- * "store only secret references in app/database".
+ * back into the UI - `integrations` shows a status, never a secret. The
+ * database stores only secret references, never a plaintext credential.
  */
 export async function addIntegration(formData: FormData): Promise<ActionResult> {
   const parsed = AddIntegration.safeParse({
@@ -310,7 +310,7 @@ export interface OnboardedClient {
 
 /**
  * Create a client, its first campaign and the credential HubSpot posts with -
- * in one transaction (PRD 14.3).
+ * in one transaction.
  *
  * Every piece of this existed already; what did not exist was a way to do it
  * without a Node script. Onboarding a client meant creating a tenant in the
@@ -327,7 +327,7 @@ export interface OnboardedClient {
  *   - activate the campaign. `active` stays false and `activationBlockers()`
  *     is returned instead, so the remaining work is stated rather than
  *     skipped.
- *   - approve compliance (PRD 17.3). That is a named person's attestation.
+ *   - approve compliance. That is a named person's attestation.
  *   - choose a real voice provider. The campaign starts on `mock`, so a new
  *     client cannot dial anyone until someone decides it should.
  */
@@ -375,7 +375,7 @@ export async function onboardClient(
     );
     const tenantId = tenant.rows[0]!.id;
 
-    // PRD 8.2: scope comes from assignment. Without this the creator would
+    // Scope comes from assignment. Without this the creator would
     // have to grant themselves an elevation to open the client they just made.
     await ctx.tx.query(
       `insert into user_tenant_assignments (user_id, tenant_id, role, created_by)

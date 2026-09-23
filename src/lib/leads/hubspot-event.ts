@@ -12,7 +12,7 @@ import { z } from "zod";
  * HubSpot posts an array of events for object changes, and a single object for
  * a workflow webhook action. Both are accepted.
  *
- * What is deliberately NOT taken from the payload: the tenant. PRD 8.2 - the
+ * What is deliberately NOT taken from the payload: the tenant - the
  * platform derives it from the service credential, never from the caller. A
  * second client means a second token, not an extra field.
  */

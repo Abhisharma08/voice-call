@@ -10,7 +10,7 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [-180, 0],
-      "notes": "G2 targets p95 under 30s from ingestion to queued; a one-minute tick keeps dial latency in the same order."
+      "notes": "The target is p95 under 30s from ingestion to queued; a one-minute tick keeps dial latency in the same order."
     },
     {
       "parameters": {
@@ -28,7 +28,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [40, 0],
-      "notes": "The platform claims leads with FOR UPDATE SKIP LOCKED, re-checks consent and DNC at claim time, and enforces the calling window and concurrency caps (FR-020 to FR-022). Overlapping ticks are safe."
+      "notes": "The platform claims leads with FOR UPDATE SKIP LOCKED, re-checks consent and DNC at claim time, and enforces the calling window and concurrency caps. Overlapping ticks are safe."
     },
     {
       "parameters": {
@@ -55,7 +55,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "// Surfacing only. The platform has already requeued transient failures\n// with exponential backoff (PRD 18.2); this is for the alerting channel in\n// PRD 18.3.\nconst failures = $input.first().json.body.dialled.filter(d => d.status === 'provider_failed');\nconsole.warn('provider failures', JSON.stringify(failures));\nreturn [{ json: { alert: 'provider_failures', count: failures.length, failures } }];"
+        "jsCode": "// Surfacing only. The platform has already requeued transient failures\n// with exponential backoff; this is for the alerting channel.\nconst failures = $input.first().json.body.dialled.filter(d => d.status === 'provider_failed');\nconsole.warn('provider failures', JSON.stringify(failures));\nreturn [{ json: { alert: 'provider_failures', count: failures.length, failures } }];"
       },
       "id": "w02-alert",
       "name": "Alert",

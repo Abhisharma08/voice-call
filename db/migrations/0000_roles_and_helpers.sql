@@ -1,8 +1,8 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 0000 — Extensions, least-privilege roles, and tenant-scope helper functions.
 --
--- PRD 8.2: "Cross-tenant queries must be structurally prevented, not merely
--- filtered in the UI." We implement that with PostgreSQL Row-Level Security.
+-- Cross-tenant queries are structurally prevented rather than merely filtered
+-- in the UI, using PostgreSQL Row-Level Security.
 -- The application NEVER connects as the table owner; it connects as app_user
 -- (human sessions) or app_service (n8n workers), both of which are subject to
 -- RLS. Tenant scope is carried in transaction-local GUCs set by the app's
@@ -13,7 +13,7 @@ create extension if not exists "pgcrypto";
 
 -- ── Roles ──────────────────────────────────────────────────────────────────
 -- Dev/CI passwords only. In staging/production these roles are provisioned by
--- infrastructure with managed credentials (PRD 17.1: separate prod/staging
+-- infrastructure with managed credentials (separate prod/staging
 -- credentials, least-privilege service accounts) and this block is a no-op.
 do $$
 begin
@@ -35,7 +35,7 @@ grant usage on schema app to app_user, app_service;
 
 -- ── Tenant-scope helpers ───────────────────────────────────────────────────
 -- app.tenant_id      the single tenant this transaction may touch
--- app.global_scope   'on' only for an authenticated Agency Admin (PRD 4)
+-- app.global_scope   'on' only for an authenticated Agency Admin
 -- app.actor_id       user id or service identity, for audit attribution
 -- app.actor_type     'user' | 'service' | 'system'
 

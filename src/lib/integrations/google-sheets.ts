@@ -3,12 +3,12 @@ import { openSecret, type SealedSecret } from "@/lib/crypto/kms";
 import { IntegrationError } from "@/lib/integrations/hubspot";
 
 /**
- * Google Sheets append (PRD 13.2, 15, FR-041).
+ * Google Sheets append.
  *
- * "The Sheets API supports appending values to the next row of a table/range
- * and requires spreadsheet ID, range, and an input option." [Ref. 3]
+ * The Sheets API appends values to the next row of a range, given a
+ * spreadsheet id, a range and an input option.
  *
- * PRD 13.2 is explicit that PostgreSQL is the source of truth and the sheet is
+ * PostgreSQL is the source of truth and the sheet is
  * an operational log - so this appends and never reads back, and idempotency
  * is enforced upstream by the outbox dedupe key (call_id), not by scanning the
  * sheet for an existing row.
@@ -24,7 +24,7 @@ export interface ServiceAccountCredentials {
 }
 
 /**
- * PRD 15's Call Log column order. Positional - do not reorder.
+ * the Call Log column order. Positional - do not reorder.
  *
  * `source`, `email`, `enquiry` and `lead_created` are the lead's own data
  * rather than the call's: who they are, what they actually asked for, and when
@@ -182,7 +182,7 @@ export class GoogleSheetsClient {
   }
 
   /**
-   * Write the PRD 15 column headers if the target range is empty.
+   * Write the column headers if the target range is empty.
    *
    * Appends are positional, so a sheet without headers produces 22 unlabelled
    * columns that a human then has to decode. Idempotent - an existing first
@@ -263,7 +263,7 @@ export class GoogleSheetsClient {
     return "created";
   }
 
-  /** Service-account JWT bearer flow (PRD 13.2 prefers a server-side service account). */
+  /** Service-account JWT bearer flow, preferred over a user-authorised token. */
   private async accessToken(): Promise<string> {
     if (this.tokenCache && this.tokenCache.expiresAt > Date.now() + 60_000) {
       return this.tokenCache.token;

@@ -6,9 +6,9 @@ import { loadMetrics } from "@/lib/analytics/metrics";
 export const dynamic = "force-dynamic";
 
 /**
- * KPIs (PRD 21).
+ * KPIs.
  *
- * The PRD's closing instruction for this section is the one worth honouring:
+ * One instruction is worth honouring above the rest:
  * "Separate AI performance metrics from commercial outcome metrics." A high
  * qualification-completion rate says the model is doing its job; it says
  * nothing about whether the leads were any good. They are grouped separately

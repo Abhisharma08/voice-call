@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { createTenant } from "./actions";
 
 /**
- * PRD 14.3 step 1: "Create tenant and timezone for the client account."
+ * Create the tenant and its timezone for a client account.
  * The timezone matters beyond display - it is the default for campaign calling
- * windows (FR-021), so getting it wrong means calling people at the wrong hour.
+ * windows, so getting it wrong means calling people at the wrong hour.
  */
 export function CreateTenantForm() {
   const router = useRouter();

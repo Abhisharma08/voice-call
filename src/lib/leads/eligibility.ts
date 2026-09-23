@@ -3,7 +3,7 @@ import { blindIndex } from "@/lib/crypto/pii";
 
 /**
  * The gate between "a lead exists" and "we are allowed to dial it"
- * (FR-014, PRD 17.4, PRD 26.1).
+ *.
  *
  * Every rule here is a reason NOT to call. They are evaluated in severity
  * order and the first hit wins, so the recorded reason is the most serious
@@ -34,9 +34,9 @@ export type EligibilityResult =
   | { eligible: false; reason: SuppressionReason; detail: string };
 
 /**
- * PRD 17.4: "Global tenant DNC list takes precedence over campaign
- * eligibility. Campaign suppression can be narrower; global DNC cannot be
- * overridden by campaign configuration."
+ * The tenant-wide DNC list takes precedence over campaign eligibility.
+ * Campaign suppression can be narrower, but a global DNC entry can never be
+ * overridden by campaign configuration.
  */
 export async function checkEligibility(
   tx: PoolClient,
@@ -131,7 +131,7 @@ export async function checkEligibility(
 
   // 3. Consent.
   //
-  // PRD 26.1's rule - "A lead may not be queued for calling unless an active
+  // the rule - "A lead may not be queued for calling unless an active
   // consents record exists" - assumed the platform was where consent first
   // became known. In the real operating model it is not: consent is collected
   // at the landing page or Meta lead form, and the lead reaches HubSpot before
@@ -167,7 +167,7 @@ export async function checkEligibility(
 
 /**
  * The active consent to stamp onto a call attempt, so each call can be
- * justified individually later (PRD 26.1).
+ * justified individually later.
  */
 export async function activeConsentFor(
   tx: PoolClient,
@@ -183,7 +183,7 @@ export async function activeConsentFor(
 }
 
 /**
- * Suppress a lead permanently (PRD 17.4, FR-025). Writes the DNC entry, flags
+ * Suppress a lead permanently. Writes the DNC entry, flags
  * the lead, and clears any queued call so a suppression takes effect before
  * the next worker tick rather than after it.
  */
@@ -213,7 +213,7 @@ export async function suppressLead(
     );
   }
 
-  // FR-025: "Stop all future calling when DNC is set" - including anything
+  // "Stop all future calling when DNC is set" - including anything
   // already sitting in the queue.
   await tx.query(
     `update leads

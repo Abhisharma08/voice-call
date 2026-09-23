@@ -6,7 +6,7 @@ import { failure, success, tenantAction, type ActionResult } from "@/lib/actions
 import { replaySync } from "@/lib/integrations/outbox";
 
 /**
- * Manual replay of a dead-lettered sync (PRD 18.3).
+ * Manual replay of a dead-lettered sync.
  *
  * `replaySync` has existed since Phase 1; what did not exist was any way to
  * call it. A row that exhausted its retries was therefore visible only to
@@ -48,7 +48,7 @@ export async function replayDeadLetter(formData: FormData): Promise<ActionResult
       const replayed = await replaySync(ctx.tx, parsed.data.id);
 
       // RLS scopes the update to this tenant, so a row belonging to another
-      // client is indistinguishable from one that does not exist (PRD 23.3) -
+      // client is indistinguishable from one that does not exist -
       // and a row that has already been replayed is no longer dead-lettered,
       // which lands here too rather than being queued twice.
       if (!replayed) {

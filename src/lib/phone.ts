@@ -6,13 +6,12 @@
 import { parsePhoneNumberWithError, type CountryCode } from "libphonenumber-js/max";
 
 /**
- * Phone normalisation (FR-011: "Normalize phone numbers to E.164 where
- * possible", FR-012: "Reject or quarantine leads without a callable phone
- * number").
+ * Phone normalisation: numbers become E.164 where possible, and a lead
+ * without a callable number is rejected or quarantined.
  *
  * This uses libphonenumber-js rather than a hand-rolled regex on purpose. The
  * failure mode of getting this wrong is dialling a real person who is not the
- * lead, which is both a compliance problem (PRD 17.3) and the kind of thing a
+ * lead, which is both a compliance problem and the kind of thing a
  * regex over Indian mobile formats gets wrong quietly.
  */
 
@@ -64,7 +63,7 @@ export function normalizePhone(raw: string | null | undefined, defaultCountry?: 
     };
   }
 
-  // FR-012 is about a *callable* number, not merely a well-formed one.
+  // What matters is a *callable* number, not merely a well-formed one.
   // Voicemail, premium-rate and pager ranges are not leads we can qualify.
   const type = parsed.getType();
   if (type === "VOICEMAIL" || type === "PREMIUM_RATE" || type === "PAGER" || type === "SHARED_COST") {

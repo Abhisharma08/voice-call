@@ -12,7 +12,7 @@
 -- already knows the stated requirement asks a shorter, less irritating call.
 --
 -- Encrypted at the application layer like the other lead-supplied columns
--- (PRD 26.2). It is free text a member of the public typed into a form: not
+--. It is free text a member of the public typed into a form: not
 -- identifying on its own, but it can easily contain an address or a name, and
 -- treating it as PII costs nothing here.
 -- ═══════════════════════════════════════════════════════════════════════════

@@ -12,7 +12,7 @@ import { ProviderError } from "@/lib/providers/voice/types";
 
 /**
  * In-process voice provider for local development, CI, and the sandbox test
- * call in the onboarding wizard (PRD 14.3 step 11).
+ * call in the onboarding wizard.
  *
  * It places no calls. It exists so the whole vertical slice - queue, call
  * record, webhook, transcript, qualification, CRM sync - can be exercised
@@ -116,7 +116,7 @@ export class MockVoiceProvider implements VoiceProvider {
     const scenario = scenarioFor(request.to);
 
     if (scenario === "provider_failure") {
-      // PRD 18.2 "Provider busy/rate limit - Yes - Queue later".
+      // Provider busy or rate limited: queue it for later.
       throw new ProviderError("Mock provider transient failure", true, "mock_transient");
     }
 
@@ -153,7 +153,7 @@ export class MockVoiceProvider implements VoiceProvider {
   }
 
   handleWebhook(rawBody: string, headers: Record<string, string>, _requestUrl?: string): NormalizedWebhook {
-    // PRD 18.2: "Webhook signature invalid - No - Reject + security log."
+    // "Webhook signature invalid - No - Reject + security log."
     const signature = headers["x-mock-signature"] ?? "";
     const expected = signWebhook(rawBody, this.webhookSecret);
 
